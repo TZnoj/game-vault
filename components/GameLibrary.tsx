@@ -2,11 +2,17 @@
 
 import Image from "next/image";
 import { useMemo, useState } from "react";
-import { GameStatus } from "@prisma/client";
 import Link from "next/link";
 import { RatingBadge } from "@/components/RatingBadge";
 import { StatusBadge } from "@/components/StatusBadge";
 
+type GameStatus =
+  | "BACKLOG"
+  | "PLAYING"
+  | "COMPLETED"
+  | "DROPPED"
+  | "REPLAYING"
+  | "ONHOLD";
 
 type GameLibraryItem = {
   id: number;

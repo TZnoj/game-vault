@@ -1,4 +1,10 @@
-import { GameStatus } from "@prisma/client";
+type GameStatus =
+  | "BACKLOG"
+  | "PLAYING"
+  | "COMPLETED"
+  | "DROPPED"
+  | "REPLAYING"
+  | "ONHOLD";
 
 const statusStyles: Record<GameStatus, string> = {
   COMPLETED: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
@@ -18,7 +24,11 @@ const statusLabels: Record<GameStatus, string> = {
   REPLAYING: "Replaying",
 };
 
-export function StatusBadge({ status }: { status: GameStatus | null | undefined }) {
+export function StatusBadge({
+  status,
+}: {
+  status: GameStatus | null | undefined;
+}) {
   if (!status) {
     return (
       <span className="inline-flex rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs font-medium text-zinc-400">

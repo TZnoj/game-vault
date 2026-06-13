@@ -134,7 +134,10 @@ export default async function PlatformPage({ params }: PageProps) {
 
   const ratings = platform.userGames
   .map((userGame: PlatformUserGame) => userGame.reviews[0]?.overallRating)
-  .filter((rating): rating is number => rating != null);
+  .filter(
+  (rating: number | null): rating is number =>
+    rating != null,
+);
 
   const averageRating =
     ratings.length > 0

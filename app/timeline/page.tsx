@@ -11,6 +11,36 @@ type PageProps = {
   }>;
 };
 
+type TimelineUserGame = {
+  id: number;
+  hoursPlayed: number | null;
+  dateCompleted: Date | null;
+  platform: {
+    name: string;
+  } | null;
+  reviews: {
+    overallRating: number | null;
+  }[];
+  game: {
+    id: number;
+    title: string;
+    coverArtUrl: string | null;
+    franchise: {
+      name: string;
+    } | null;
+    gameGenres: {
+      genre: {
+        name: string;
+      };
+    }[];
+  };
+};
+
+type SelectOption = {
+  id: number;
+  name: string;
+};
+
 export default async function TimelinePage({ searchParams }: PageProps) {
   const { genre, franchise, platform, rating } = await searchParams;
   const completedGames = await prisma.userGame.findMany({

@@ -9,8 +9,31 @@ const UNFINISHED_STATUSES = [
   "REPLAYING",
 ] as const;
 
+type BacklogUserGame = {
+  id: number;
+  status: string;
+  hoursPlayed: number | null;
+  platform: {
+    name: string;
+  } | null;
+  game: {
+    id: number;
+    title: string;
+    coverArtUrl: string | null;
+    hltbMain: number | null;
+    franchise: {
+      name: string;
+    } | null;
+    gameGenres: {
+      genre: {
+        name: string;
+      };
+    }[];
+  };
+};
+
 export default async function BacklogPage() {
-  const backlogGames = await prisma.userGame.findMany({
+  const backlogGames = (await prisma.userGame.findMany({
     where: {
       status: {
         in: [...UNFINISHED_STATUSES],
@@ -37,16 +60,16 @@ export default async function BacklogPage() {
         title: "asc",
       },
     },
-  });
+  })) as BacklogUserGame[];
 
   const estimatedHoursRemaining = backlogGames.reduce(
-    (sum, userGame) =>
+  (sum: number, userGame: BacklogUserGame) =>
       sum + (userGame.game.hltbMain ?? userGame.hoursPlayed ?? 0),
     0,
   );
 
   const gamesWithEstimate = backlogGames.filter(
-    (userGame) =>
+    (userGame: BacklogUserGame) =>
       userGame.game.hltbMain != null || userGame.hoursPlayed != null,
   );
 
@@ -56,12 +79,12 @@ export default async function BacklogPage() {
       : null;
 
   const longestGames = [...backlogGames]
-    .sort((a, b) => getEstimatedHours(b) - getEstimatedHours(a))
+    .sort((a: BacklogUserGame, b: BacklogUserGame) => getEstimatedHours(b) - getEstimatedHours(a))
     .slice(0, 10);
 
   const shortestGames = [...backlogGames]
-    .filter((userGame) => getEstimatedHours(userGame) > 0)
-    .sort((a, b) => getEstimatedHours(a) - getEstimatedHours(b))
+    .filter((userGame: BacklogUserGame) => getEstimatedHours(userGame) > 0)
+    .sort((a: BacklogUserGame, b: BacklogUserGame) => getEstimatedHours(a) - getEstimatedHours(b))
     .slice(0, 10);
 
   const platformCounts = new Map<string, { count: number; hours: number }>();
@@ -81,8 +104,8 @@ export default async function BacklogPage() {
     platformCounts.set(platform, currentPlatform);
 
     const genres = userGame.game.gameGenres.map(
-      (gameGenre) => gameGenre.genre.name,
-    );
+  (gameGenre: { genre: { name: string } }) => gameGenre.genre.name,
+);
 
     if (genres.length === 0) {
       const current = genreCounts.get("Unknown Genre") ?? {
@@ -142,7 +165,7 @@ export default async function BacklogPage() {
           label="Games Missing Estimate"
           value={
             backlogGames.filter(
-              (userGame) =>
+              (userGame: BacklogUserGame) =>
                 userGame.game.hltbMain == null && userGame.hoursPlayed == null,
             ).length
           }
@@ -152,7 +175,7 @@ export default async function BacklogPage() {
       <section className="mt-10 grid gap-6 lg:grid-cols-2">
         <Panel title="Longest Backlog Games">
           <div className="space-y-3">
-            {longestGames.map((userGame) => (
+            {longestGames.map((userGame: BacklogUserGame) => (
               <BacklogRow key={userGame.id} userGame={userGame} />
             ))}
           </div>
@@ -160,7 +183,7 @@ export default async function BacklogPage() {
 
         <Panel title="Shortest Backlog Games">
           <div className="space-y-3">
-            {shortestGames.map((userGame) => (
+            {shortestGames.map((userGame: BacklogUserGame) => (
               <BacklogRow key={userGame.id} userGame={userGame} />
             ))}
           </div>
@@ -195,7 +218,7 @@ export default async function BacklogPage() {
         <h2 className="text-2xl font-bold">All Backlog Games</h2>
 
         <div className="mt-4 grid gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-          {backlogGames.map((userGame) => (
+          {backlogGames.map((userGame: BacklogUserGame) => (
             <Link
               key={userGame.id}
               href={`/game/${userGame.game.id}`}
@@ -286,17 +309,7 @@ function Panel({
 function BacklogRow({
   userGame,
 }: {
-  userGame: {
-    id: number;
-    hoursPlayed: number | null;
-    status: string;
-    platform: { name: string } | null;
-    game: {
-      id: number;
-      title: string;
-      hltbMain: number | null;
-    };
-  };
+  userGame: BacklogUserGame;
 }) {
   return (
     <Link

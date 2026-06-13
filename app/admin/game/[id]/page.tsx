@@ -371,8 +371,10 @@ export default async function EditGamePage({ params, searchParams }: PageProps) 
   const coverChoices = await getIgdbCoverChoices(game.title);
 
   const selectedGenreIds = new Set(
-    game.gameGenres.map((gameGenre) => gameGenre.genreId),
-  );
+  game.gameGenres.map(
+    (gameGenre: { genreId: number }) => gameGenre.genreId,
+  ),
+);
 
   return (
     <main className="min-h-screen bg-zinc-950 p-8 text-white">

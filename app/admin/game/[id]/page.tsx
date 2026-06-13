@@ -47,6 +47,35 @@ type IgdbCoverChoice = {
   url: string;
 };
 
+type PlatformOption = {
+  id: number;
+  name: string;
+};
+
+type GenreOption = {
+  id: number;
+  name: string;
+};
+
+type FranchiseOption = {
+  id: number;
+  name: string;
+};
+
+type GameGenreOption = {
+  genreId: number;
+};
+
+type UserGameCopy = {
+  id: number;
+  gameId: number;
+  status: string;
+  hoursPlayed: number | null;
+  platform: {
+    name: string;
+  } | null;
+};
+
 async function getTwitchAccessToken() {
   const clientId = process.env.TWITCH_CLIENT_ID;
   const clientSecret = process.env.TWITCH_CLIENT_SECRET;
@@ -149,6 +178,10 @@ const lockHLTB = formData.get("lockHLTB") === "on";
       coverArtUrl: overrideCoverArtUrl || null,
       manualReleaseDate,
       lockReleaseDate,
+      manualMetacritic,
+lockCoverArt,
+lockMetacritic,
+lockHLTB,
     },
     create: {
       gameId,
@@ -158,6 +191,10 @@ const lockHLTB = formData.get("lockHLTB") === "on";
       coverArtUrl: overrideCoverArtUrl || null,
       manualReleaseDate,
       lockReleaseDate,
+      manualMetacritic,
+lockCoverArt,
+lockMetacritic,
+lockHLTB,
     },
   });
 
@@ -351,29 +388,40 @@ export default async function EditGamePage({ params, searchParams }: PageProps) 
     notFound();
   }
 
-  const platforms = await prisma.platform.findMany({
-    orderBy: {
-      name: "asc",
-    },
-  });
+const platforms: PlatformOption[] = await prisma.platform.findMany({
+  orderBy: {
+    name: "asc",
+  },
+  select: {
+    id: true,
+    name: true,
+  },
+});
 
-  const genres = await prisma.genre.findMany({
-    orderBy: {
-      name: "asc",
-    },
-  });
-  const franchises = await prisma.franchise.findMany({
-    orderBy: {
-      name: "asc",
-    },
-  });
+const genres: GenreOption[] = await prisma.genre.findMany({
+  orderBy: {
+    name: "asc",
+  },
+  select: {
+    id: true,
+    name: true,
+  },
+});
+
+const franchises: FranchiseOption[] = await prisma.franchise.findMany({
+  orderBy: {
+    name: "asc",
+  },
+  select: {
+    id: true,
+    name: true,
+  },
+});
 
   const coverChoices = await getIgdbCoverChoices(game.title);
 
   const selectedGenreIds = new Set(
-  game.gameGenres.map(
-    (gameGenre: { genreId: number }) => gameGenre.genreId,
-  ),
+  game.gameGenres.map((gameGenre: GameGenreOption) => gameGenre.genreId),
 );
 
   return (
@@ -561,7 +609,7 @@ export default async function EditGamePage({ params, searchParams }: PageProps) 
   </div>
 
   <div className="divide-y divide-zinc-800 overflow-hidden rounded-lg border border-zinc-800">
-    {game.userGames.map((copy) => (
+    {game.userGames.map((copy: UserGameCopy) => (
       <div
         key={copy.id}
         className="grid gap-4 px-4 py-3 sm:grid-cols-[1fr_140px_140px_80px]"

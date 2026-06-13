@@ -12,5 +12,12 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user }) {
       return user.email === "tylerznoj1995@gmail.com";
     },
+    async session({ session, token }) {
+      if (session.user && token.email) {
+        session.user.email = token.email;
+      }
+
+      return session;
+    },
   },
 };

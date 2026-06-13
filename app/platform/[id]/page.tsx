@@ -144,8 +144,14 @@ export default async function PlatformPage({ params }: PageProps) {
 const platformRankings = (allPlatforms as unknown as PlatformRanking[])
   .map((platform: PlatformRanking) => {
     const ratings = platform.userGames
-      .map((userGame: PlatformUserGame) => userGame.reviews[0]?.overallRating)
-      .filter((rating): rating is number => rating != null);
+  .map(
+    (userGame: { reviews: PlatformReview[] }) =>
+      userGame.reviews[0]?.overallRating,
+  )
+  .filter(
+    (rating: number | null): rating is number =>
+      rating != null,
+  );
 
     const average =
       ratings.length > 0
@@ -159,11 +165,27 @@ const platformRankings = (allPlatforms as unknown as PlatformRanking[])
       average,
     };
   })
-  .filter((platform: PlatformRanking) => platform.gamesOwned > 0 && platform.average != null)
-  .sort((a, b) => (b.average ?? 0) - (a.average ?? 0));
+  .filter(
+  (platform: {
+    id: number;
+    name: string;
+    gamesOwned: number;
+    average: number | null;
+  }) =>
+    platform.gamesOwned > 0 &&
+    platform.average != null,
+)
+.sort(
+  (
+    a: { average: number | null },
+    b: { average: number | null },
+  ) => (b.average ?? 0) - (a.average ?? 0),
+);
 
 const platformRank =
-  platformRankings.findIndex((rankedPlatform: PlatformRanking) => rankedPlatform.id === platform.id) + 1;      
+  platformRankings.findIndex(
+    (rankedPlatform: { id: number }) => rankedPlatform.id === platform.id,
+  ) + 1; 
 
   const gamesWithHours = platform.userGames.filter(
   (userGame: PlatformUserGame) => userGame.hoursPlayed != null,

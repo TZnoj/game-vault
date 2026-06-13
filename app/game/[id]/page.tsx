@@ -321,7 +321,7 @@ export default async function GamePage({ params }: PageProps) {
 
           <div className="mt-3 flex flex-wrap gap-2">
             {genres.length > 0 ? (
-              genres.map((genre) => (
+              genres.map((genre: string) => (
                 <span
                   key={genre}
                   className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-300"
@@ -371,7 +371,7 @@ export default async function GamePage({ params }: PageProps) {
   </div>
 
   <div className="divide-y divide-zinc-800 overflow-hidden rounded-lg border border-zinc-800">
-    {game.userGames.map((copy) => {
+    {typedGame.userGames.map((copy: GameUserGame) => {
   const copyReview = copy.reviews[0];
 
   return (
@@ -483,7 +483,7 @@ export default async function GamePage({ params }: PageProps) {
           <h2 className="text-2xl font-bold">Similar Games</h2>
 
           <div className="mt-4 flex flex-wrap justify-center lg:justify-start gap-4">
-            {similarGames.map((similarGame) => (
+            {similarGames.map((similarGame: SimilarGameResult) => (
               <Link
                 key={similarGame.id}
                 href={`/game/${similarGame.id}`}
@@ -508,7 +508,7 @@ export default async function GamePage({ params }: PageProps) {
                 </p>
 
                 <div className="mt-1 flex flex-col items-center gap-1">
-                  {similarGame.similarityReasons?.map((reason) => (
+                  {similarGame.similarityReasons.map((reason: string) => (
                     <span key={reason} className="text-[10px] text-zinc-500">
                       ✓ {reason}
                     </span>

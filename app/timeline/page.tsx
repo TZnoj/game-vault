@@ -43,7 +43,7 @@ type SelectOption = {
 
 export default async function TimelinePage({ searchParams }: PageProps) {
   const { genre, franchise, platform, rating } = await searchParams;
-  const completedGames = await prisma.userGame.findMany({
+  const completedGames = (await prisma.userGame.findMany({
     where: {
       status: "COMPLETED",
       dateCompleted: {
@@ -95,11 +95,11 @@ export default async function TimelinePage({ searchParams }: PageProps) {
     orderBy: {
       dateCompleted: "desc",
     },
-  });
+    })) as TimelineUserGame[];
 
   const filteredGames =
-    rating && rating !== "ALL"
-      ? completedGames.filter((userGame) => {
+  rating && rating !== "ALL"
+    ? completedGames.filter((userGame: TimelineUserGame) => {
           const overallRating = userGame.reviews[0]?.overallRating;
 
           return (
@@ -108,7 +108,7 @@ export default async function TimelinePage({ searchParams }: PageProps) {
           );
         })
       : completedGames;
-  const grouped = new Map<string, Map<string, typeof filteredGames>>();
+  const grouped = new Map<string, Map<string, TimelineUserGame[]>>();
 
   for (const userGame of filteredGames) {
     if (!userGame.dateCompleted) continue;
@@ -167,7 +167,7 @@ export default async function TimelinePage({ searchParams }: PageProps) {
               className="input"
             >
               <option value="ALL">All Genres</option>
-              {allGenres.map((item) => (
+              {allGenres.map((item: SelectOption) => (
                 <option key={item.id} value={item.name}>
                   {item.name}
                 </option>
@@ -180,7 +180,7 @@ export default async function TimelinePage({ searchParams }: PageProps) {
               className="input"
             >
               <option value="ALL">All Franchises</option>
-              {allFranchises.map((item) => (
+              {allFranchises.map((item: SelectOption) => (
                 <option key={item.id} value={item.name}>
                   {item.name}
                 </option>
@@ -193,7 +193,7 @@ export default async function TimelinePage({ searchParams }: PageProps) {
               className="input"
             >
               <option value="ALL">All Platforms</option>
-              {allPlatforms.map((item) => (
+              {allPlatforms.map((item: SelectOption) => (
                 <option key={item.id} value={item.name}>
                   {item.name}
                 </option>
@@ -244,7 +244,7 @@ export default async function TimelinePage({ searchParams }: PageProps) {
     );
 
     const ratings = yearGames
-      .map((userGame) => userGame.reviews[0]?.overallRating)
+      .map((userGame: TimelineUserGame) => userGame.reviews[0]?.overallRating)
       .filter((rating): rating is number => rating != null);
 
     const averageRating =
@@ -287,10 +287,10 @@ export default async function TimelinePage({ searchParams }: PageProps) {
               </div>
 
               <div className="space-y-3">
-                {games.map((userGame) => {
+                {games.map((userGame: TimelineUserGame) => {
                   const review = userGame.reviews[0];
                   const genres = userGame.game.gameGenres.map(
-                    (gameGenre) => gameGenre.genre.name
+                    (gameGenre: { genre: { name: string } }) => gameGenre.genre.name
                   );
                   const completedDate = new Date(userGame.dateCompleted!);
 

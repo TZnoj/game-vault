@@ -4,8 +4,23 @@ import { prisma } from "@/lib/prisma";
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARLY_GAME_GOAL = 20;
 
+type GoalUserGame = {
+  id: number;
+  status: string;
+  dateCompleted: Date | null;
+  hoursPlayed: number | null;
+  game: {
+    id: number;
+    title: string;
+    hltbMain: number | null;
+  };
+  reviews: {
+    overallRating: number | null;
+  }[];
+};
+
 export default async function GoalsPage() {
-  const userGames = await prisma.userGame.findMany({
+  const userGames = (await prisma.userGame.findMany({
     include: {
       game: true,
       reviews: {
@@ -14,9 +29,9 @@ export default async function GoalsPage() {
         },
       },
     },
-  });
+    })) as GoalUserGame[];
 
-  const completedThisYear = userGames.filter((userGame) => {
+  const completedThisYear = userGames.filter((userGame: GoalUserGame) => {
     if (userGame.status !== "COMPLETED" || !userGame.dateCompleted) {
       return false;
     }
@@ -25,27 +40,27 @@ export default async function GoalsPage() {
   });
 
   const backlogGames = userGames.filter(
-    (userGame) => userGame.status === "BACKLOG",
+    (userGame: GoalUserGame) => userGame.status === "BACKLOG",
   );
 
   const backlogHours = backlogGames.reduce(
-    (sum, userGame) =>
+    (sum, userGame: GoalUserGame) =>
       sum + (userGame.game.hltbMain ?? userGame.hoursPlayed ?? 0),
     0,
   );
 
   const completedHoursThisYear = completedThisYear.reduce(
-    (sum, userGame) => sum + (userGame.hoursPlayed ?? 0),
+    (sum, userGame: GoalUserGame) => sum + (userGame.hoursPlayed ?? 0),
     0,
   );
 
   const ratingsThisYear = completedThisYear
-    .map((userGame) => userGame.reviews[0]?.overallRating)
+    .map((userGame: GoalUserGame) => userGame.reviews[0]?.overallRating)
     .filter((rating): rating is number => rating != null);
 
   const averageRatingThisYear =
     ratingsThisYear.length > 0
-      ? ratingsThisYear.reduce((sum, rating) => sum + rating, 0) /
+      ? ratingsThisYear.reduce((sum: number, rating: number) => sum + rating, 0) /
         ratingsThisYear.length
       : null;
 
@@ -175,7 +190,7 @@ export default async function GoalsPage() {
         <h2 className="text-2xl font-bold">Completed This Year</h2>
 
         <div className="mt-4 divide-y divide-zinc-800 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
-          {completedThisYear.map((userGame) => (
+          {completedThisYear.map((userGame: GoalUserGame) => (
             <Link
               key={userGame.id}
               href={`/game/${userGame.game.id}`}

@@ -10,6 +10,43 @@ type PageProps = {
   }>;
 };
 
+type FranchiseReview = {
+  overallRating: number | null;
+};
+
+type FranchiseUserGame = {
+  id: number;
+  status: string;
+  hoursPlayed: number | null;
+  platform?: {
+    name: string;
+  } | null;
+  reviews: FranchiseReview[];
+};
+
+type FranchiseGame = {
+  id: number;
+  title: string;
+  coverArtUrl: string | null;
+  isEndless: boolean;
+  gameGenres: {
+    genre: {
+      name: string;
+    };
+  }[];
+  userGames: FranchiseUserGame[];
+};
+
+type FranchiseUserGameWithGame = FranchiseUserGame & {
+  game: FranchiseGame;
+};
+
+type FranchiseWithGames = {
+  id: number;
+  name: string;
+  games: FranchiseGame[];
+};
+
 export default async function FranchisePage({ params }: PageProps) {
   const { id } = await params;
   const franchiseId = Number(id);
@@ -70,25 +107,28 @@ export default async function FranchisePage({ params }: PageProps) {
   },
 });
 
-  const userGames = franchise.games.flatMap((game) =>
-    game.userGames.map((userGame) => ({
-      ...userGame,
-      game,
-    })),
-  );
+  const userGames: FranchiseUserGameWithGame[] = (
+  franchise as FranchiseWithGames
+).games.flatMap((game: FranchiseGame) =>
+  game.userGames.map((userGame: FranchiseUserGame) => ({
+    ...userGame,
+    game,
+  })),
+);
 
   const completionEligibleGames = userGames.filter(
-  (userGame) => !userGame.game.isEndless,
+  (userGame: FranchiseUserGameWithGame) => !userGame.game.isEndless,
 );
 
-  const completedGames = completionEligibleGames.filter(
-  (userGame) => userGame.status === "COMPLETED",
+const completedGames = completionEligibleGames.filter(
+  (userGame: FranchiseUserGameWithGame) => userGame.status === "COMPLETED",
 );
 
-  const totalHours = completedGames.reduce(
-    (sum, userGame) => sum + (userGame.hoursPlayed ?? 0),
-    0,
-  );
+const totalHours = completedGames.reduce(
+  (sum: number, userGame: FranchiseUserGameWithGame) =>
+    sum + (userGame.hoursPlayed ?? 0),
+  0,
+);
 
   const ratings = userGames
     .map((userGame) => userGame.reviews[0]?.overallRating)
@@ -239,12 +279,12 @@ const longestFranchiseRank =
         <h2 className="text-2xl font-bold">Games</h2>
 
         <div className="mt-4 grid gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-          {franchise.games.map((game) => {
+          {(franchise as FranchiseWithGames).games.map((game: FranchiseGame) => {
             const userGame = game.userGames[0];
             const review = userGame?.reviews[0];
             const genres = game.gameGenres.map(
-              (gameGenre) => gameGenre.genre.name,
-            );
+  (gameGenre: { genre: { name: string } }) => gameGenre.genre.name,
+);
 
             return (
               <Link

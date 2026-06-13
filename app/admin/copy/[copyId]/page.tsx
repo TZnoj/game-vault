@@ -13,6 +13,8 @@ type PageProps = {
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
 
+  console.log("ADMIN SESSION:", session);
+
   if (session?.user?.email !== "tylerznoj1995@gmail.com") {
     throw new Error("Unauthorized");
   }

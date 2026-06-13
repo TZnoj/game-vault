@@ -28,6 +28,8 @@ function parseNullableNumber(value: FormDataEntryValue | null) {
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
 
+  console.log("ADMIN SESSION:", session);
+
   if (session?.user?.email !== "tylerznoj1995@gmail.com") {
     throw new Error("Unauthorized");
   }
@@ -269,7 +271,7 @@ return (
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-zinc-400"
             >
               <option value="NONE">Unknown Platform</option>
-              {platforms.map((platform) => (
+              {platforms.map((platform: PlatformOption) => (
                 <option key={platform.id} value={platform.id}>
                   {platform.name}
                 </option>
@@ -336,7 +338,7 @@ return (
         <h2 className="mb-4 text-xl font-bold">Genres</h2>
 
         <div className="grid gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4 sm:grid-cols-2 lg:grid-cols-3">
-          {genres.map((genre) => (
+          {genres.map((genre: GenreOption) => (
             <label
               key={genre.id}
               className="flex items-center gap-2 text-sm text-zinc-300"

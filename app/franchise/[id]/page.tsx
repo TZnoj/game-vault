@@ -47,6 +47,16 @@ type FranchiseWithGames = {
   games: FranchiseGame[];
 };
 
+type FranchiseRankingGame = {
+  userGames: FranchiseUserGame[];
+};
+
+type FranchiseRanking = {
+  id: number;
+  name: string;
+  games: FranchiseRankingGame[];
+};
+
 export default async function FranchisePage({ params }: PageProps) {
   const { id } = await params;
   const franchiseId = Number(id);
@@ -157,22 +167,26 @@ const averageHours =
     : null;
 
 const mostPlayed = [...userGames]
-  .filter((userGame) => userGame.hoursPlayed != null)
-  .sort((a, b) => (b.hoursPlayed ?? 0) - (a.hoursPlayed ?? 0))[0];
+  .filter((userGame: FranchiseUserGameWithGame) => userGame.hoursPlayed != null)
+  .sort(
+    (a: FranchiseUserGameWithGame, b: FranchiseUserGameWithGame) =>
+      (b.hoursPlayed ?? 0) - (a.hoursPlayed ?? 0),
+  )[0];
 
-const franchiseRankings = allFranchises
-  .map((franchise) => {
+const franchiseRankings = (allFranchises as unknown as FranchiseRanking[])
+  .map((franchise: FranchiseRanking) => {
     const franchiseUserGames = franchise.games.flatMap(
-      (game) => game.userGames,
+      (game: FranchiseRankingGame) => game.userGames,
     );
 
     const ratings = franchiseUserGames
-      .map((userGame) => userGame.reviews[0]?.overallRating)
+      .map((userGame: FranchiseUserGame) => userGame.reviews[0]?.overallRating)
       .filter((rating): rating is number => rating != null);
 
     const average =
       ratings.length > 0
-        ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+        ? ratings.reduce((sum: number, rating: number) => sum + rating, 0) /
+          ratings.length
         : null;
 
     return {
@@ -182,22 +196,31 @@ const franchiseRankings = allFranchises
       average,
     };
   })
-  .filter((franchise) => franchise.games > 0 && franchise.average != null)
-  .sort((a, b) => (b.average ?? 0) - (a.average ?? 0));
+  .filter(
+    (franchise: { games: number; average: number | null }) =>
+      franchise.games > 0 && franchise.average != null,
+  )
+  .sort(
+    (
+      a: { average: number | null },
+      b: { average: number | null },
+    ) => (b.average ?? 0) - (a.average ?? 0),
+  );
 
 const franchiseRank =
   franchiseRankings.findIndex(
-    (rankedFranchise) => rankedFranchise.id === franchise.id,
+    (rankedFranchise: { id: number }) => rankedFranchise.id === franchise.id,
   ) + 1;
 
-const longestFranchiseRankings = allFranchises
-  .map((franchise) => {
+const longestFranchiseRankings = (allFranchises as unknown as FranchiseRanking[])
+  .map((franchise: FranchiseRanking) => {
     const franchiseUserGames = franchise.games.flatMap(
-      (game) => game.userGames,
+      (game: FranchiseRankingGame) => game.userGames,
     );
 
     const totalHours = franchiseUserGames.reduce(
-      (sum, userGame) => sum + (userGame.hoursPlayed ?? 0),
+      (sum: number, userGame: FranchiseUserGame) =>
+        sum + (userGame.hoursPlayed ?? 0),
       0,
     );
 
@@ -208,20 +231,32 @@ const longestFranchiseRankings = allFranchises
       totalHours,
     };
   })
-  .filter((franchise) => franchise.games > 0 && franchise.totalHours > 0)
-  .sort((a, b) => b.totalHours - a.totalHours);
+  .filter(
+    (franchise: { games: number; totalHours: number }) =>
+      franchise.games > 0 && franchise.totalHours > 0,
+  )
+  .sort(
+    (
+      a: { totalHours: number },
+      b: { totalHours: number },
+    ) => b.totalHours - a.totalHours,
+  );
 
 const longestFranchiseRank =
   longestFranchiseRankings.findIndex(
-    (rankedFranchise) => rankedFranchise.id === franchise.id,
+    (rankedFranchise: { id: number }) => rankedFranchise.id === franchise.id,
   ) + 1;
 
-  const highestRated = [...userGames]
-    .filter((userGame) => userGame.reviews[0]?.overallRating != null)
-    .sort(
-      (a, b) =>
-        (b.reviews[0]?.overallRating ?? 0) - (a.reviews[0]?.overallRating ?? 0),
-    )[0];
+const highestRated = [...userGames]
+  .filter(
+    (userGame: FranchiseUserGameWithGame) =>
+      userGame.reviews[0]?.overallRating != null,
+  )
+  .sort(
+    (a: FranchiseUserGameWithGame, b: FranchiseUserGameWithGame) =>
+      (b.reviews[0]?.overallRating ?? 0) -
+      (a.reviews[0]?.overallRating ?? 0),
+  )[0];
 
   return (
     <main className="min-h-screen bg-zinc-950 p-8 text-white">

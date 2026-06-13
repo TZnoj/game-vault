@@ -272,7 +272,9 @@ async function deleteGame(formData: FormData) {
     redirect("/admin");
   }
 
-  const userGameIds = game.userGames.map((userGame) => userGame.id);
+  const userGameIds = game.userGames.map(
+  (userGame: { id: number }) => userGame.id,
+);
 
   await prisma.review.deleteMany({
     where: {

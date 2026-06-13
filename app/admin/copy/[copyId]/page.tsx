@@ -213,9 +213,14 @@ console.log("FOUND COPY", {
 const gameId = userGame.gameId;
     const review = userGame.reviews[0];
 
-  const platforms = await prisma.platform.findMany({
+  const platforms: { id: number; name: string }[] =
+  await prisma.platform.findMany({
     orderBy: {
       name: "asc",
+    },
+    select: {
+      id: true,
+      name: true,
     },
   });
 

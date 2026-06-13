@@ -309,11 +309,11 @@ const mostPlayedGame = [...platform.userGames]
         <h2 className="text-2xl font-bold">Games</h2>
 
         <div className="mt-4 grid gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-          {platform.userGames.map((userGame) => {
+          {platform.userGames.map((userGame: PlatformUserGame) => {
             const review = userGame.reviews[0];
             const genres = userGame.game.gameGenres.map(
-              (gameGenre) => gameGenre.genre.name,
-            );
+  (gameGenre: PlatformGameGenre) => gameGenre.genre.name,
+);
 
             return (
               <Link

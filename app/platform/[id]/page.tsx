@@ -10,6 +10,42 @@ type PageProps = {
   }>;
 };
 
+type PlatformReview = {
+  overallRating: number | null;
+};
+
+type PlatformGameGenre = {
+  genre: {
+    name: string;
+  };
+};
+
+type PlatformUserGame = {
+  id: number;
+  status: string;
+  hoursPlayed: number | null;
+  game: {
+    id: number;
+    title: string;
+    coverArtUrl: string | null;
+    hltbMain: number | null;
+    isEndless: boolean;
+    franchise: {
+      name: string;
+    } | null;
+    gameGenres: PlatformGameGenre[];
+  };
+  reviews: PlatformReview[];
+};
+
+type PlatformRanking = {
+  id: number;
+  name: string;
+  userGames: {
+    reviews: PlatformReview[];
+  }[];
+};
+
 export default async function PlatformPage({ params }: PageProps) {
   const { id } = await params;
   const platformId = Number(id);

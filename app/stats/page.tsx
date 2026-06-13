@@ -7,8 +7,39 @@ import {
 } from "@/components/StatsCharts";
 import { RatingBadge } from "@/components/RatingBadge";
 
+type StatsUserGame = {
+  id: number;
+  status: string;
+  hoursPlayed: number | null;
+  dateCompleted: Date | null;
+  platformId: number | null;
+  platform: {
+    id: number;
+    name: string;
+  } | null;
+  game: {
+    id: number;
+    title: string;
+    hltbMain: number | null;
+    isEndless: boolean;
+    franchise: {
+      id: number;
+      name: string;
+    } | null;
+    gameGenres: {
+      genre: {
+        name: string;
+      };
+    }[];
+  };
+  reviews: {
+    overallRating: number | null;
+  }[];
+};
+
+
 export default async function StatsPage() {
-const userGames = await prisma.userGame.findMany({
+const userGames = (await prisma.userGame.findMany({
   include: {
     platform: true,
     game: {
@@ -27,61 +58,71 @@ const userGames = await prisma.userGame.findMany({
       },
     },
   },
-});
-
+})) as StatsUserGame[];
 
   const completionEligibleGames = userGames.filter(
-  (userGame) => !userGame.game.isEndless,
+  (userGame: StatsUserGame) => !userGame.game.isEndless,
 );
+
 const completedGames = completionEligibleGames.filter(
-  (game) => game.status === "COMPLETED",
+  (game: StatsUserGame) => game.status === "COMPLETED",
 );
-  const inProgressGames = userGames.filter((game) => game.status === "PLAYING");
-  const backlogGames = completionEligibleGames.filter(
-  (game) => game.status === "BACKLOG",
+
+const inProgressGames = userGames.filter(
+  (game: StatsUserGame) => game.status === "PLAYING",
 );
-  const onHoldGames = userGames.filter((game) => game.status === "ONHOLD");
+
+const backlogGames = completionEligibleGames.filter(
+  (game: StatsUserGame) => game.status === "BACKLOG",
+);
+
+const onHoldGames = userGames.filter(
+  (game: StatsUserGame) => game.status === "ONHOLD",
+);
 
   const totalHoursPlayed = completedGames.reduce(
-    (sum, game) => sum + (game.hoursPlayed ?? 0),
+    (sum: number, game: StatsUserGame) => sum + (game.hoursPlayed ?? 0),
     0,
   );
 
   const backlogHoursRemaining = backlogGames.reduce(
-  (sum, userGame) =>
+  (sum: number, userGame: StatsUserGame) =>
     sum + (userGame.game.hltbMain ?? userGame.hoursPlayed ?? 0),
   0
 );
 
 const completedGamesWithHours = completedGames.filter(
-  (userGame) => userGame.hoursPlayed != null
+  (userGame: StatsUserGame) => userGame.hoursPlayed != null
 );
 
 const averageCompletionTime =
   completedGamesWithHours.length > 0
     ? completedGamesWithHours.reduce(
-        (sum, userGame) => sum + (userGame.hoursPlayed ?? 0),
+        (sum: number, userGame: StatsUserGame) => sum + (userGame.hoursPlayed ?? 0),
         0
       ) / completedGamesWithHours.length
     : null;
 
 const reviewsWritten = userGames.filter(
-  (userGame) => userGame.reviews.length > 0
+  (userGame: StatsUserGame) => userGame.reviews.length > 0
 ).length;
 
 const platformsPlayed = new Set(
   userGames
-    .map((userGame) => userGame.platformId)
+    .map((userGame: StatsUserGame) => userGame.platformId)
     .filter((platformId): platformId is number => platformId != null)
 ).size;
 
   const allRatings = userGames
-    .map((game) => game.reviews[0]?.overallRating)
-    .filter((rating): rating is number => rating != null);
+    .map((game: StatsUserGame) => game.reviews[0]?.overallRating)
+    .filter(
+  (rating: number | null): rating is number =>
+    rating != null,
+);
 
   const averageRating =
     allRatings.length > 0
-      ? allRatings.reduce((sum, rating) => sum + rating, 0) / allRatings.length
+      ? allRatings.reduce((sum, rating: number) => sum + rating, 0) / allRatings.length
       : null;
 
 const completionRate =
@@ -93,7 +134,7 @@ const completionRate =
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
   const topRatedGames = userGames
-    .filter((game) => {
+    .filter((game: StatsUserGame) => {
       const rating = game.reviews[0]?.overallRating;
       const dateCompleted = game.dateCompleted
         ? new Date(game.dateCompleted)
@@ -104,7 +145,7 @@ const completionRate =
       );
     })
     .sort(
-      (a, b) =>
+      (a: StatsUserGame, b: StatsUserGame) =>
         (b.reviews[0]?.overallRating ?? 0) - (a.reviews[0]?.overallRating ?? 0),
     )
     .slice(0, 10);

@@ -10,6 +10,45 @@ type PageProps = {
   }>;
 };
 
+type GameGenreWithGenre = {
+  genreId: number;
+  genre: {
+    name: string;
+  };
+};
+
+type GameReview = {
+  overallRating: number | null;
+};
+
+type GameUserGame = {
+  id: number;
+  gameId: number;
+  platformId: number | null;
+  status: string;
+  hoursPlayed: number | null;
+  dateCompleted: Date | null;
+  platform: {
+    name: string;
+  } | null;
+  reviews: GameReview[];
+};
+
+type SimilarGame = {
+  id: number;
+  title: string;
+  coverArtUrl: string | null;
+  releaseDate: Date | null;
+  franchiseId: number | null;
+  gameGenres: GameGenreWithGenre[];
+  userGames: GameUserGame[];
+};
+
+type SimilarGameResult = SimilarGame & {
+  similarityScore: number;
+  similarityReasons: string[];
+};
+
 export default async function GamePage({ params }: PageProps) {
   const { id } = await params;
   const gameId = Number(id);
@@ -44,15 +83,26 @@ export default async function GamePage({ params }: PageProps) {
     notFound();
   }
 
-  const userGame = game.userGames[0];
+  const typedGame = game as typeof game & {
+    gameGenres: GameGenreWithGenre[];
+    userGames: GameUserGame[];
+  };
+
+  const userGame = typedGame.userGames[0];
   const review = userGame?.reviews[0];
-  const genres = game.gameGenres.map((gameGenre) => gameGenre.genre.name);
-  const genreIds = game.gameGenres.map((gameGenre) => gameGenre.genreId);
+
+  const genres = typedGame.gameGenres.map(
+    (gameGenre: GameGenreWithGenre) => gameGenre.genre.name,
+  );
+
+  const genreIds = typedGame.gameGenres.map(
+    (gameGenre: GameGenreWithGenre) => gameGenre.genreId,
+  );
 
   const previousGame = await prisma.game.findFirst({
     where: {
       id: {
-        lt: game.id,
+        lt: typedGame.id,
       },
     },
     orderBy: {
@@ -63,7 +113,7 @@ export default async function GamePage({ params }: PageProps) {
   const nextGame = await prisma.game.findFirst({
     where: {
       id: {
-        gt: game.id,
+        gt: typedGame.id,
       },
     },
     orderBy: {
@@ -74,7 +124,7 @@ export default async function GamePage({ params }: PageProps) {
   const candidateGames = await prisma.game.findMany({
     where: {
       id: {
-        not: game.id,
+        not: typedGame.id,
       },
     },
     include: {
@@ -97,107 +147,112 @@ export default async function GamePage({ params }: PageProps) {
     },
   });
 
-const currentGenreIds = new Set(genreIds);
-const currentPlatformIds = new Set(
-  game.userGames
-    .map((userGame) => userGame.platformId)
-    .filter((platformId): platformId is number => platformId != null),
-);
-const currentRating = review?.overallRating ?? null;
-const currentReleaseYear = game.releaseDate
-  ? new Date(game.releaseDate).getFullYear()
-  : null;
+  const currentGenreIds = new Set(genreIds);
 
-const similarGames = candidateGames
-  .map((candidate) => {
-    const candidateUserGame = candidate.userGames[0];
-    const candidateReview = candidateUserGame?.reviews[0];
+  const currentPlatformIds = new Set(
+    typedGame.userGames
+      .map((userGame: GameUserGame) => userGame.platformId)
+      .filter((platformId): platformId is number => platformId != null),
+  );
 
-    const candidateGenreIds = candidate.gameGenres.map(
-      (gameGenre) => gameGenre.genreId,
-    );
+  const currentRating = review?.overallRating ?? null;
 
-    const sharedGenreCount = candidateGenreIds.filter((genreId) =>
-      currentGenreIds.has(genreId),
-    ).length;
+  const currentReleaseYear = typedGame.releaseDate
+    ? new Date(typedGame.releaseDate).getFullYear()
+    : null;
 
-    let score = 0;
-    const reasons: string[] = [];
+  const similarGames: SimilarGameResult[] = (candidateGames as SimilarGame[])
+    .map((candidate: SimilarGame) => {
+      const candidateUserGame = candidate.userGames[0];
+      const candidateReview = candidateUserGame?.reviews[0];
 
-    const genrePercent =
-      genreIds.length > 0 ? sharedGenreCount / genreIds.length : 0;
-
-    score += genrePercent * 40;
-
-    if (sharedGenreCount > 0) {
-      reasons.push("Same Genre");
-    }
-
-    if (
-      game.franchiseId &&
-      candidate.franchiseId &&
-      game.franchiseId === candidate.franchiseId
-    ) {
-      score += 30;
-      reasons.push("Same Franchise");
-    }
-
-    const candidatePlatformIds = candidate.userGames
-      .map((userGame) => userGame.platformId)
-      .filter((platformId): platformId is number => platformId != null);
-
-    const hasSharedPlatform = candidatePlatformIds.some((platformId) =>
-      currentPlatformIds.has(platformId),
-    );
-
-    if (hasSharedPlatform) {
-      score += 15;
-      reasons.push("Same Platform");
-    }
-
-    if (currentRating != null && candidateReview?.overallRating != null) {
-      const ratingDifference = Math.abs(
-        currentRating - candidateReview.overallRating,
+      const candidateGenreIds = candidate.gameGenres.map(
+        (gameGenre: GameGenreWithGenre) => gameGenre.genreId,
       );
 
-      const ratingScore = Math.max(0, 15 - ratingDifference * 3);
+      const sharedGenreCount = candidateGenreIds.filter((genreId: number) =>
+        currentGenreIds.has(genreId),
+      ).length;
 
-      score += ratingScore;
+      let score = 0;
+      const reasons: string[] = [];
 
-      if (ratingDifference <= 1) {
-        reasons.push("Similar Rating");
+      const genrePercent =
+        genreIds.length > 0 ? sharedGenreCount / genreIds.length : 0;
+
+      score += genrePercent * 40;
+
+      if (sharedGenreCount > 0) {
+        reasons.push("Same Genre");
       }
-    }
 
-    if (currentReleaseYear && candidate.releaseDate) {
-      const releaseYearDifference = Math.abs(
-        currentReleaseYear - new Date(candidate.releaseDate).getFullYear(),
+      if (
+        typedGame.franchiseId &&
+        candidate.franchiseId &&
+        typedGame.franchiseId === candidate.franchiseId
+      ) {
+        score += 30;
+        reasons.push("Same Franchise");
+      }
+
+      const candidatePlatformIds = candidate.userGames
+        .map((userGame: GameUserGame) => userGame.platformId)
+        .filter((platformId): platformId is number => platformId != null);
+
+      const hasSharedPlatform = candidatePlatformIds.some(
+        (platformId: number) => currentPlatformIds.has(platformId),
       );
 
-      if (releaseYearDifference <= 2) {
-        score += 5;
-      } else if (releaseYearDifference <= 5) {
-        score += 3;
-      } else if (releaseYearDifference <= 10) {
-        score += 1;
+      if (hasSharedPlatform) {
+        score += 15;
+        reasons.push("Same Platform");
       }
-    }
 
-    return {
-      ...candidate,
-      similarityScore: score,
-      similarityReasons: reasons,
-    };
-  })
-  .filter((candidate) => candidate.similarityScore >= 20)
-  .sort((a, b) => {
-    if (b.similarityScore !== a.similarityScore) {
-      return b.similarityScore - a.similarityScore;
-    }
+      if (currentRating != null && candidateReview?.overallRating != null) {
+        const ratingDifference = Math.abs(
+          currentRating - candidateReview.overallRating,
+        );
 
-    return a.title.localeCompare(b.title);
-  })
-  .slice(0, 6);
+        const ratingScore = Math.max(0, 15 - ratingDifference * 3);
+
+        score += ratingScore;
+
+        if (ratingDifference <= 1) {
+          reasons.push("Similar Rating");
+        }
+      }
+
+      if (currentReleaseYear && candidate.releaseDate) {
+        const releaseYearDifference = Math.abs(
+          currentReleaseYear - new Date(candidate.releaseDate).getFullYear(),
+        );
+
+        if (releaseYearDifference <= 2) {
+          score += 5;
+        } else if (releaseYearDifference <= 5) {
+          score += 3;
+        } else if (releaseYearDifference <= 10) {
+          score += 1;
+        }
+      }
+
+      return {
+        ...candidate,
+        similarityScore: score,
+        similarityReasons: reasons,
+      };
+    })
+    .filter(
+      (candidate: SimilarGameResult) => candidate.similarityScore >= 20,
+    )
+    .sort((a: SimilarGameResult, b: SimilarGameResult) => {
+      if (b.similarityScore !== a.similarityScore) {
+        return b.similarityScore - a.similarityScore;
+      }
+
+      return a.title.localeCompare(b.title);
+    })
+    .slice(0, 6);
 
   return (
     <main className="min-h-screen bg-zinc-950 p-8 text-white">

@@ -1,6 +1,34 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
+type PlatformListUserGame = {
+  status: string;
+  hoursPlayed: number | null;
+  game: {
+    hltbMain: number | null;
+  };
+  reviews: {
+    overallRating: number | null;
+  }[];
+};
+
+type PlatformListItem = {
+  id: number;
+  name: string;
+  userGames: PlatformListUserGame[];
+};
+
+type PlatformStat = {
+  id: number;
+  name: string;
+  gamesOwned: number;
+  gamesCompleted: number;
+  completionRate: number;
+  hoursPlayed: number;
+  backlogHours: number;
+  averageRating: number | null;
+};
+
 export default async function PlatformsPage() {
   const platforms = await prisma.platform.findMany({
     orderBy: {
@@ -25,35 +53,36 @@ export default async function PlatformsPage() {
     },
   });
 
-  const platformStats = platforms.map((platform) => {
+  const platformStats: PlatformStat[] = (platforms as PlatformListItem[]).map(
+  (platform: PlatformListItem) => {
     const gamesOwned = platform.userGames.length;
 
     const gamesCompleted = platform.userGames.filter(
-      (userGame) => userGame.status === "COMPLETED",
+      (userGame: PlatformListUserGame) => userGame.status === "COMPLETED",
     ).length;
 
     const completionRate =
       gamesOwned > 0 ? (gamesCompleted / gamesOwned) * 100 : 0;
 
     const hoursPlayed = platform.userGames
-      .filter((userGame) => userGame.status === "COMPLETED")
-      .reduce((sum, userGame) => sum + (userGame.hoursPlayed ?? 0), 0);
+      .filter((userGame: PlatformListUserGame) => userGame.status === "COMPLETED")
+      .reduce((sum, userGame: PlatformListUserGame) => sum + (userGame.hoursPlayed ?? 0), 0);
 
     const backlogHours = platform.userGames
-      .filter((userGame) => userGame.status !== "COMPLETED")
+      .filter((userGame: PlatformListUserGame) => userGame.status !== "COMPLETED")
       .reduce(
-        (sum, userGame) =>
+        (sum, userGame: PlatformListUserGame) =>
           sum + (userGame.game.hltbMain ?? userGame.hoursPlayed ?? 0),
         0,
       );
 
     const ratings = platform.userGames
-      .map((userGame) => userGame.reviews[0]?.overallRating)
-      .filter((rating): rating is number => rating != null);
+      .map((userGame: PlatformListUserGame) => userGame.reviews[0]?.overallRating)
+      .filter((rating: number | null): rating is number => rating != null);
 
     const averageRating =
       ratings.length > 0
-        ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+        ? ratings.reduce((sum, rating: number) => sum + rating, 0) / ratings.length
         : null;
 
     return {
@@ -66,7 +95,8 @@ export default async function PlatformsPage() {
       backlogHours,
       averageRating,
     };
-  });
+    },
+);
 
   return (
     <main className="min-h-screen bg-zinc-950 p-8 text-white">

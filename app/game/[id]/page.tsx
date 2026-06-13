@@ -152,7 +152,10 @@ export default async function GamePage({ params }: PageProps) {
   const currentPlatformIds = new Set(
     typedGame.userGames
       .map((userGame: GameUserGame) => userGame.platformId)
-      .filter((platformId): platformId is number => platformId != null),
+      .filter(
+  (platformId: number | null): platformId is number =>
+    platformId != null,
+),
   );
 
   const currentRating = review?.overallRating ?? null;
@@ -197,7 +200,10 @@ export default async function GamePage({ params }: PageProps) {
 
       const candidatePlatformIds = candidate.userGames
         .map((userGame: GameUserGame) => userGame.platformId)
-        .filter((platformId): platformId is number => platformId != null);
+        .filter(
+  (platformId: number | null): platformId is number =>
+    platformId != null,
+);
 
       const hasSharedPlatform = candidatePlatformIds.some(
         (platformId: number) => currentPlatformIds.has(platformId),

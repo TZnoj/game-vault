@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { GameStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -46,7 +45,13 @@ async function updateCopy(formData: FormData) {
   const gameId = Number(formData.get("gameId"));
   const copyId = Number(formData.get("copyId"));
   const platformIdRaw = String(formData.get("platformId") ?? "NONE");
-  const status = String(formData.get("status") ?? "BACKLOG") as GameStatus;
+  const status = String(formData.get("status") ?? "BACKLOG") as
+  | "BACKLOG"
+  | "PLAYING"
+  | "COMPLETED"
+  | "DROPPED"
+  | "REPLAYING"
+  | "ONHOLD";
 
   if (!Number.isInteger(gameId) || !Number.isInteger(copyId)) {
     throw new Error("Invalid IDs");

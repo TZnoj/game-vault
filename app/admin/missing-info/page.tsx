@@ -2,6 +2,46 @@ import Image from "next/image";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
+type MissingInfoReview = {
+  overallRating: number | null;
+  gameplayRating: number | null;
+  storyRating: number | null;
+  artRating: number | null;
+  musicRating: number | null;
+  notes: string | null;
+};
+
+type MissingInfoUserGame = {
+  status: string;
+  dateCompleted: Date | null;
+  hoursPlayed: number | null;
+  platform: {
+    name: string;
+  } | null;
+  reviews: MissingInfoReview[];
+};
+
+type MissingInfoGame = {
+  id: number;
+  title: string;
+  coverArtUrl: string | null;
+  hltbMain: number | null;
+  metacriticScore: number | null;
+  isEndless: boolean;
+  franchise: {
+    name: string;
+  } | null;
+  gameGenres: unknown[];
+  userGames: MissingInfoUserGame[];
+};
+
+type MissingInfoRow = {
+  game: MissingInfoGame;
+  userGame: MissingInfoUserGame | undefined;
+  review: MissingInfoReview | undefined;
+  missing: string[];
+};
+
 export default async function MissingInfoPage() {
   const games = await prisma.game.findMany({
     orderBy: {
@@ -27,8 +67,8 @@ export default async function MissingInfoPage() {
     },
   });
 
-  const rows = games
-    .map((game) => {
+  const rows: MissingInfoRow[] = (games as MissingInfoGame[])
+  .map((game: MissingInfoGame) => {
       const userGame = game.userGames[0];
       const review = userGame?.reviews[0];
 
@@ -40,9 +80,7 @@ export default async function MissingInfoPage() {
       if (!userGame?.platform) missing.push("Platform");
       if (game.gameGenres.length === 0) missing.push("Genre");
       if (!game.franchise) missing.push("Franchise");
-      if (game.isEndless) {
-  missing.push("Endless");
-}
+      
 
       if (
   !game.isEndless &&
@@ -70,7 +108,7 @@ export default async function MissingInfoPage() {
         missing,
       };
     })
-    .filter((row) => row.missing.length > 0);
+    .filter((row: MissingInfoRow) => row.missing.length > 0);
 
   const missingCover = rows.filter((row) =>
     row.missing.includes("Cover")

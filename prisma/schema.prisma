@@ -1,0 +1,198 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Platform {
+  id           Int     @id @default(autoincrement())
+  name         String  @unique
+  manufacturer String?
+  generation   Int?
+
+  gamePlatforms GamePlatform[]
+  userGames     UserGame[]
+}
+
+model Franchise {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  games Game[]
+}
+
+model Genre {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  gameGenres GameGenre[]
+}
+
+model Game {
+  id Int @id @default(autoincrement())
+
+  rawgId Int? @unique
+
+  title String @unique
+
+  slug String? @unique
+
+  coverArtUrl String?
+
+  releaseDate DateTime?
+
+  metadataOverride MetadataOverride?
+
+  metacriticScore Int?
+
+  isEndless     Boolean @default(false)
+
+  hltbMain          Float?
+  hltbMainExtra     Float?
+  hltbCompletionist Float?
+
+  franchiseId Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  franchise Franchise? @relation(fields: [franchiseId], references: [id])
+
+  gamePlatforms GamePlatform[]
+
+  gameGenres GameGenre[]
+
+  screenshots GameImage[]
+
+  userGames UserGame[]
+
+  genreOverride GenreOverride?
+}
+
+model GamePlatform {
+  id Int @id @default(autoincrement())
+
+  gameId     Int
+  platformId Int
+
+  game     Game     @relation(fields: [gameId], references: [id])
+  platform Platform @relation(fields: [platformId], references: [id])
+
+  @@unique([gameId, platformId])
+}
+
+model GameGenre {
+  id Int @id @default(autoincrement())
+
+  gameId  Int
+  genreId Int
+
+  game  Game  @relation(fields: [gameId], references: [id])
+  genre Genre @relation(fields: [genreId], references: [id])
+
+  @@unique([gameId, genreId])
+}
+
+model GameImage {
+  id Int @id @default(autoincrement())
+
+  gameId Int
+
+  imageUrl String
+
+  sortOrder Int @default(0)
+
+  game Game @relation(fields: [gameId], references: [id])
+}
+
+model UserGame {
+  id Int @id @default(autoincrement())
+
+  gameId Int
+
+  platformId Int?
+
+  status GameStatus
+
+  dateStarted DateTime?
+
+  dateCompleted DateTime?
+
+  hoursPlayed Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  game Game @relation(fields: [gameId], references: [id])
+
+  platform Platform? @relation(fields: [platformId], references: [id])
+
+  reviews Review[]
+}
+
+enum GameStatus {
+  BACKLOG
+  PLAYING
+  COMPLETED
+  DROPPED
+  REPLAYING
+  ONHOLD
+}
+
+model Review {
+  id Int @id @default(autoincrement())
+
+  userGameId Int
+
+  overallRating Float?
+
+  artRating Float?
+
+  musicRating Float?
+
+  storyRating Float?
+
+  gameplayRating Float?
+
+  notes String?
+
+  reviewDate DateTime?
+
+  userGame UserGame @relation(fields: [userGameId], references: [id])
+}
+
+model GenreOverride {
+  id     Int    @id @default(autoincrement())
+  gameId Int    @unique
+  genres String
+
+  game Game @relation(fields: [gameId], references: [id])
+}
+
+model MetadataOverride {
+  id Int @id @default(autoincrement())
+
+  gameId Int @unique
+
+  igdbName    String?
+  rawgName    String?
+  hltbName    String?
+  coverArtUrl String?
+
+  manualMetacritic  Int?
+  manualReleaseDate DateTime?
+
+  lockCoverArt    Boolean @default(false)
+  lockMetacritic  Boolean @default(false)
+  lockHLTB        Boolean @default(false)
+  lockReleaseDate Boolean @default(false)
+
+  game Game @relation(fields: [gameId], references: [id])
+}

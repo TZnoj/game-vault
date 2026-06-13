@@ -5,6 +5,16 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { enrichSingleGame } from "@/lib/enrichGame";
 
+type PlatformOption = {
+  id: number;
+  name: string;
+};
+
+type GenreOption = {
+  id: number;
+  name: string;
+};
+
 function parseNullableNumber(value: FormDataEntryValue | null) {
   if (!value) return null;
 
@@ -125,13 +135,21 @@ await enrichSingleGame(game.id);
 }
 
 export default async function NewGamePage() {
-  const platforms = await prisma.platform.findMany({
-    orderBy: { name: "asc" },
-  });
+const platforms: PlatformOption[] = await prisma.platform.findMany({
+  orderBy: { name: "asc" },
+  select: {
+    id: true,
+    name: true,
+  },
+});
 
-  const genres = await prisma.genre.findMany({
-    orderBy: { name: "asc" },
-  });
+const genres: GenreOption[] = await prisma.genre.findMany({
+  orderBy: { name: "asc" },
+  select: {
+    id: true,
+    name: true,
+  },
+});
 
 return (
   <main className="min-h-screen bg-zinc-950 p-8 text-white">

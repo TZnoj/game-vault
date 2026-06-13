@@ -106,51 +106,50 @@ export default async function PlatformPage({ params }: PageProps) {
 
   const gamesOwned = platform.userGames.length;
   const completionEligibleGames = platform.userGames.filter(
-  (userGame) => !userGame.game.isEndless,
+  (userGame: PlatformUserGame) => !userGame.game.isEndless,
 );
 
   const completedGames = completionEligibleGames.filter(
-    (userGame) => userGame.status === "COMPLETED",
-  );
-
-  const backlogGames = completionEligibleGames.filter(
-  (userGame) => userGame.status !== "COMPLETED",
+  (userGame: PlatformUserGame) => userGame.status === "COMPLETED",
 );
-
+  const backlogGames = completionEligibleGames.filter(
+  (userGame: PlatformUserGame) => userGame.status !== "COMPLETED",
+);
   const completionRate =
   completionEligibleGames.length > 0
     ? (completedGames.length / completionEligibleGames.length) * 100
     : 0;
 
   const hoursPlayed = completedGames.reduce(
-    (sum, userGame) => sum + (userGame.hoursPlayed ?? 0),
-    0,
-  );
+  (sum: number, userGame: PlatformUserGame) =>
+    sum + (userGame.hoursPlayed ?? 0),
+  0,
+);
 
   const backlogHours = backlogGames.reduce(
-    (sum, userGame) =>
-      sum + (userGame.game.hltbMain ?? userGame.hoursPlayed ?? 0),
-    0,
-  );
+  (sum: number, userGame: PlatformUserGame) =>
+    sum + (userGame.game.hltbMain ?? userGame.hoursPlayed ?? 0),
+  0,
+);
 
   const ratings = platform.userGames
-    .map((userGame) => userGame.reviews[0]?.overallRating)
-    .filter((rating): rating is number => rating != null);
+  .map((userGame: PlatformUserGame) => userGame.reviews[0]?.overallRating)
+  .filter((rating): rating is number => rating != null);
 
   const averageRating =
     ratings.length > 0
-      ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+      ? ratings.reduce((sum: number, rating: number) => sum + rating, 0) / ratings.length
       : null;
 
-const platformRankings = allPlatforms
-  .map((platform) => {
+const platformRankings = (allPlatforms as unknown as PlatformRanking[])
+  .map((platform: PlatformRanking) => {
     const ratings = platform.userGames
-      .map((userGame) => userGame.reviews[0]?.overallRating)
+      .map((userGame: PlatformUserGame) => userGame.reviews[0]?.overallRating)
       .filter((rating): rating is number => rating != null);
 
     const average =
       ratings.length > 0
-        ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+        ? ratings.reduce((sum: number, rating: number) => sum + rating, 0) / ratings.length
         : null;
 
     return {
@@ -160,39 +159,39 @@ const platformRankings = allPlatforms
       average,
     };
   })
-  .filter((platform) => platform.gamesOwned > 0 && platform.average != null)
+  .filter((platform: PlatformRanking) => platform.gamesOwned > 0 && platform.average != null)
   .sort((a, b) => (b.average ?? 0) - (a.average ?? 0));
 
 const platformRank =
-  platformRankings.findIndex((rankedPlatform) => rankedPlatform.id === platform.id) + 1;      
+  platformRankings.findIndex((rankedPlatform: PlatformRanking) => rankedPlatform.id === platform.id) + 1;      
 
   const gamesWithHours = platform.userGames.filter(
-  (userGame) => userGame.hoursPlayed != null,
+  (userGame: PlatformUserGame) => userGame.hoursPlayed != null,
 );
 
 const averageHours =
   gamesWithHours.length > 0
     ? gamesWithHours.reduce(
-        (sum, userGame) => sum + (userGame.hoursPlayed ?? 0),
+        (sum: number, userGame: PlatformUserGame) => sum + (userGame.hoursPlayed ?? 0),
         0,
       ) / gamesWithHours.length
     : null;
 
 const highestRatedGame = [...platform.userGames]
-  .filter((userGame) => userGame.reviews[0]?.overallRating != null)
+  .filter((userGame: PlatformUserGame) => userGame.reviews[0]?.overallRating != null)
   .sort(
-    (a, b) =>
+    (a: PlatformUserGame, b: PlatformUserGame) =>
       (b.reviews[0]?.overallRating ?? 0) - (a.reviews[0]?.overallRating ?? 0),
   )[0];
 
 const mostPlayedGame = [...platform.userGames]
-  .filter((userGame) => userGame.hoursPlayed != null)
-  .sort((a, b) => (b.hoursPlayed ?? 0) - (a.hoursPlayed ?? 0))[0];
+  .filter((userGame: PlatformUserGame) => userGame.hoursPlayed != null)
+  .sort((a: PlatformUserGame, b: PlatformUserGame) => (b.hoursPlayed ?? 0) - (a.hoursPlayed ?? 0))[0];
 
   const topRatedGames = [...platform.userGames]
-    .filter((userGame) => userGame.reviews[0]?.overallRating != null)
+    .filter((userGame: PlatformUserGame) => userGame.reviews[0]?.overallRating != null)
     .sort(
-      (a, b) =>
+      (a: PlatformUserGame, b: PlatformUserGame) =>
         (b.reviews[0]?.overallRating ?? 0) - (a.reviews[0]?.overallRating ?? 0),
     )
     .slice(0, 10);

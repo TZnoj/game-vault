@@ -2,6 +2,33 @@ import Image from "next/image";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
+type AdminReview = {
+  overallRating: number | null;
+};
+
+type AdminUserGame = {
+  status: string;
+  platform: {
+    name: string;
+  } | null;
+  reviews: AdminReview[];
+};
+
+type AdminGameGenre = {
+  genre: {
+    name: string;
+  };
+};
+
+type AdminGame = {
+  id: number;
+  title: string;
+  coverArtUrl: string | null;
+  hltbMain: number | null;
+  userGames: AdminUserGame[];
+  gameGenres: AdminGameGenre[];
+};
+
 export default async function AdminPage() {
   const games = await prisma.game.findMany({
     orderBy: { title: "asc" },
@@ -66,12 +93,12 @@ export default async function AdminPage() {
           </div>
 
           <div className="divide-y divide-zinc-800">
-            {games.map((game) => {
+            {(games as AdminGame[]).map((game: AdminGame) => {
               const userGame = game.userGames[0];
               const review = userGame?.reviews[0];
               const genres = game.gameGenres.map(
-                (gameGenre) => gameGenre.genre.name,
-              );
+  (gameGenre: AdminGameGenre) => gameGenre.genre.name,
+);
 
               return (
                 <Link

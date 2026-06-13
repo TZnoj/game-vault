@@ -9,6 +9,47 @@ type PageProps = {
   }>;
 };
 
+type FranchiseReview = {
+  overallRating: number | null;
+};
+
+type FranchiseUserGame = {
+  status: string;
+  hoursPlayed: number | null;
+  reviews: FranchiseReview[];
+};
+
+type FranchiseGame = {
+  id: number;
+  title: string;
+  isEndless: boolean;
+  userGames: FranchiseUserGame[];
+};
+
+type FranchiseUserGameWithGame = FranchiseUserGame & {
+  game: FranchiseGame;
+};
+
+type FranchiseListItem = {
+  id: number;
+  name: string;
+  games: FranchiseGame[];
+};
+
+type FranchiseRow = {
+  id: number;
+  name: string;
+  games: number;
+  copies: number;
+  completed: number;
+  completionRate: number;
+  averageRating: number | null;
+  totalHours: number;
+  averageHours: number | null;
+  highestRatedGame: FranchiseUserGameWithGame | undefined;
+  mostPlayedGame: FranchiseUserGameWithGame | undefined;
+};
+
 export default async function FranchisesPage({ searchParams }: PageProps) {
   const { sort = "averageRating", direction = "desc" } = await searchParams;
   const franchises = await prisma.franchise.findMany({
@@ -40,10 +81,11 @@ export default async function FranchisesPage({ searchParams }: PageProps) {
     },
   });
 
-  const rows = franchises
-    .map((franchise) => {
-      const userGames = franchise.games.flatMap((game) =>
-        game.userGames.map((userGame) => ({
+  const rows: FranchiseRow[] = (franchises as unknown as FranchiseListItem[])
+  .map((franchise: FranchiseListItem) => {
+      const userGames: FranchiseUserGameWithGame[] = franchise.games.flatMap(
+  (game: FranchiseGame) =>
+    game.userGames.map((userGame: FranchiseUserGame) => ({
           ...userGame,
           game,
         })),
@@ -63,11 +105,11 @@ export default async function FranchisesPage({ searchParams }: PageProps) {
 
       const averageRating =
         ratings.length > 0
-          ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+          ? ratings.reduce((sum: number, rating: number) => sum + rating, 0) / ratings.length
           : null;
 
       const totalHours = userGames.reduce(
-        (sum, userGame) => sum + (userGame.hoursPlayed ?? 0),
+        (sum: number, userGame: FranchiseUserGameWithGame) => sum + (userGame.hoursPlayed ?? 0),
         0,
       );
 
@@ -115,7 +157,7 @@ export default async function FranchisesPage({ searchParams }: PageProps) {
         mostPlayedGame,
       };
     })
-    .sort((a, b) => {
+    .sort((a: FranchiseRow, b: FranchiseRow) => {
   let result = 0;
 
   if (sort === "averageRating") {
@@ -127,8 +169,12 @@ export default async function FranchisesPage({ searchParams }: PageProps) {
   }
 
   if (sort === "highestRating") {
-    const aRating = a.highestRatedGame?.reviews[0]?.overallRating ?? -1;
-    const bRating = b.highestRatedGame?.reviews[0]?.overallRating ?? -1;
+    const aRating =
+      a.highestRatedGame?.reviews[0]?.overallRating ?? -1;
+
+    const bRating =
+      b.highestRatedGame?.reviews[0]?.overallRating ?? -1;
+
     result = aRating - bRating;
   }
 
@@ -156,16 +202,16 @@ export default async function FranchisesPage({ searchParams }: PageProps) {
         <StatCard label="Franchises" value={rows.length} />
         <StatCard
           label="Total Games"
-          value={rows.reduce((sum, row) => sum + row.games, 0)}
+          value={rows.reduce((sum: number, row: FranchiseRow) => sum + row.games, 0)}
         />
         <StatCard
           label="Total Copies"
-          value={rows.reduce((sum, row) => sum + row.copies, 0)}
+          value={rows.reduce((sum: number, row: FranchiseRow) => sum + row.copies, 0)}
         />
         <StatCard
           label="Total Hours"
           value={`${rows
-            .reduce((sum, row) => sum + row.totalHours, 0)
+            .reduce((sum: number, row: FranchiseRow) => sum + row.totalHours, 0)
             .toFixed(1)} hrs`}
         />
       </section>

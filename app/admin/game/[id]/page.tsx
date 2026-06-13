@@ -260,7 +260,20 @@ lockHLTB,
     },
   });
 
-  
+  await prisma.gameGenre.deleteMany({
+  where: {
+    gameId,
+  },
+});
+
+for (const genreId of genreIds) {
+  await prisma.gameGenre.create({
+    data: {
+      gameId,
+      genreId,
+    },
+  });
+}
 
   redirect(`/game/${gameId}`);
 }

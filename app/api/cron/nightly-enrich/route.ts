@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { enrichSingleGame } from "@/lib/enrichGame";
 
+const GAMES_PER_RUN = 350;
+
 type BeforeAfterSnapshot = {
   coverArtUrl: string | null;
   metacriticScore: number | null;
@@ -14,7 +16,6 @@ type BeforeAfterSnapshot = {
 
 
 export async function GET(request: Request) {
-console.log("CRON AUTH:", request.headers.get("authorization"));
   const authHeader = request.headers.get("authorization");
 
 if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -43,6 +44,7 @@ if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     orderBy: {
       updatedAt: "asc",
     },
+    take: GAMES_PER_RUN,
     select: {
       id: true,
       title: true,

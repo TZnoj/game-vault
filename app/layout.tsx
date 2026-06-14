@@ -22,8 +22,9 @@ export const metadata = {
   },
   description: "Tyler's personal game collection and backlog tracker.",
   icons: {
-    icon: "/icon.png",
-    apple: "/icon.png",
+    icon: "/tyguy-icon.png?v=3",
+    shortcut: "/tyguy-icon.png?v=3",
+    apple: "/tyguy-icon.png?v=3",
   },
 };
 

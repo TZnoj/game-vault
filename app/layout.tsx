@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { NavBar } from "@/components/NavBar";
 
+
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -15,10 +17,14 @@ const geistMono = Geist_Mono({
 
 export const metadata = {
   title: {
-    default: "Tyguy's Game Vault",
-    template: "%s | Tyguy's Game Vault",
+    default: "TyGuy Game Vault",
+    template: "%s | TyGuy Game Vault",
   },
-  description: "Tyguy's personal game collection and backlog tracker.",
+  description: "Tyler's personal game collection and backlog tracker.",
+  icons: {
+    icon: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({

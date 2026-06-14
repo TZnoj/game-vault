@@ -13,9 +13,10 @@ type BeforeAfterSnapshot = {
   releaseDate: Date | null;
 };
 
-console.log("CRON AUTH:", request.headers.get("authorization"));
+
 
 export async function GET(request: Request) {
+console.log("CRON AUTH:", request.headers.get("authorization"));
   const authHeader = request.headers.get("authorization");
 
 if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {

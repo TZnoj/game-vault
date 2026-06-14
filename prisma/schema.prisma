@@ -73,6 +73,8 @@ model Game {
 
   userGames UserGame[]
 
+  enrichmentLogs EnrichmentLog[]
+
   genreOverride GenreOverride?
 }
 
@@ -195,4 +197,38 @@ model MetadataOverride {
   lockReleaseDate Boolean @default(false)
 
   game Game @relation(fields: [gameId], references: [id])
+}
+
+model EnrichmentRun {
+  id Int @id @default(autoincrement())
+
+  source String
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+
+  gamesChecked Int @default(0)
+  gamesUpdated Int @default(0)
+  gamesFailed Int @default(0)
+
+  logs EnrichmentLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EnrichmentLog {
+  id Int @id @default(autoincrement())
+
+  runId Int
+  gameId Int?
+
+  gameTitle String
+  status String
+  changedFields String[]
+  error String?
+
+  run EnrichmentRun @relation(fields: [runId], references: [id])
+  game Game? @relation(fields: [gameId], references: [id])
+
+  createdAt DateTime @default(now())
 }

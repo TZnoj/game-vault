@@ -74,6 +74,12 @@ export default async function AdminPage() {
           >
             Missing Info
           </Link>
+          <Link
+  href="/admin/enrichment"
+  className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 font-semibold text-white hover:border-zinc-400"
+>
+  Enrichment Logs
+</Link>
         </div>
 
         <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4">

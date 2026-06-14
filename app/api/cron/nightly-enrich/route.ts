@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { enrichSingleGame } from "@/lib/enrichGame";
 
-const GAMES_PER_RUN = 10;
-
 type BeforeAfterSnapshot = {
   coverArtUrl: string | null;
   metacriticScore: number | null;
@@ -45,7 +43,6 @@ if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     orderBy: {
       updatedAt: "asc",
     },
-    take: GAMES_PER_RUN,
     select: {
       id: true,
       title: true,

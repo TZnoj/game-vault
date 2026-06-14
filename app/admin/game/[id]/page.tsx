@@ -816,15 +816,15 @@ const franchises: FranchiseOption[] = await prisma.franchise.findMany({
   </p>
 
   <form action={deleteGame} className="mt-4">
-    
+  <input type="hidden" name="gameId" value={game.id} />
 
-    <button
-      type="submit"
-      className="rounded-lg border border-red-700 bg-red-900 px-5 py-3 font-semibold text-red-100 hover:bg-red-800"
-    >
-      Delete Game
-    </button>
-  </form>
+  <button
+    type="submit"
+    className="rounded-lg border border-red-700 bg-red-900 px-5 py-3 font-semibold text-red-100 hover:bg-red-800"
+  >
+    Delete Game
+  </button>
+</form>
 </section>
       </div>
     </main>

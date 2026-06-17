@@ -16,21 +16,21 @@ type RecommendationUserGame = {
     name: string;
   } | null;
   game: {
+  id: number;
+  title: string;
+  coverArtUrl: string | null;
+  hltbMain: number | null;
+  isEndless: boolean;
+  franchise: {
     id: number;
-    title: string;
-    coverArtUrl: string | null;
-    hltbMain: number | null;
-    franchise: {
+    name: string;
+  } | null;
+  gameGenres: {
+    genre: {
       id: number;
       name: string;
-    } | null;
-    gameGenres: {
-      genre: {
-        id: number;
-        name: string;
-      };
-    }[];
-  };
+    };
+  }[];
 };
 
 type Recommendation = RecommendationUserGame & {
@@ -145,8 +145,9 @@ export default async function RecommendationsPage() {
     });
 
   const backlogGames = userGames.filter(
-    (userGame: RecommendationUserGame) => userGame.status === "BACKLOG",
-  );
+  (userGame: RecommendationUserGame) =>
+    userGame.status === "BACKLOG" && !userGame.game.isEndless,
+);
 
   const recommendations: Recommendation[] = backlogGames
     .map((userGame: RecommendationUserGame) => {

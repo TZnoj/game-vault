@@ -32,6 +32,7 @@ type RecommendationUserGame = {
     };
   }[];
 };
+}
 
 type Recommendation = RecommendationUserGame & {
   score: number;

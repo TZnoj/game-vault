@@ -106,7 +106,13 @@ export default async function PlatformPage({ params }: PageProps) {
 
   const gamesOwned = platform.userGames.length;
   const completionEligibleGames = platform.userGames.filter(
-  (userGame: PlatformUserGame) => !userGame.game.isEndless,
+  (userGame: PlatformUserGame) =>
+    !userGame.game.isEndless &&
+    !platform.userGames.some(
+      (otherUserGame: PlatformUserGame) =>
+        otherUserGame.game.id === userGame.game.id &&
+        otherUserGame.status === "COMPLETED",
+    ),
 );
 
   const completedGames = completionEligibleGames.filter(

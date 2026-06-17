@@ -2,6 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 type TimeBucket = "Short" | "Medium" | "Long" | "Very Long" | "Unknown";
 
 type RecommendationUserGame = {
@@ -46,10 +48,8 @@ function getTimeBucket(hours: number | null): TimeBucket {
   return "Very Long";
 }
 
-function getSeededJitter(id: number, score: number) {
-  const x = Math.sin(id * 9999) * 10000;
-  const random = x - Math.floor(x);
-  return score * (random * 0.1 - 0.05);
+function getRandomJitter(score: number) {
+  return score * (Math.random() * 0.1 - 0.05);
 }
 
 export default async function RecommendationsPage() {
@@ -220,7 +220,7 @@ export default async function RecommendationsPage() {
       }
 
       const baseScore = score;
-      const finalScore = Math.round(score + getSeededJitter(userGame.id, score));
+      const finalScore = Math.round(score + getRandomJitter(score));
 
       return {
         ...userGame,

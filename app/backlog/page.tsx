@@ -33,7 +33,7 @@ type BacklogUserGame = {
 };
 
 export default async function BacklogPage() {
-  const backlogGames = await prisma.userGame.findMany({
+  const backlogGames = (await prisma.userGame.findMany({
   where: {
     status: {
       in: [...UNFINISHED_STATUSES],

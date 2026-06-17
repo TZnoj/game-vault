@@ -173,21 +173,39 @@ export default async function GamePage({ params }: PageProps) {
         (gameGenre: GameGenreWithGenre) => gameGenre.genreId,
       );
 
+      const currentGenreNames = typedGame.gameGenres.map(
+  (gameGenre: GameGenreWithGenre) => gameGenre.genre.name,
+);
+
+const candidateGenreNames = candidate.gameGenres.map(
+  (gameGenre: GameGenreWithGenre) => gameGenre.genre.name,
+);
+
       const sharedGenreCount = candidateGenreIds.filter((genreId: number) =>
-        currentGenreIds.has(genreId),
-      ).length;
+  currentGenreIds.has(genreId),
+).length;
 
-      let score = 0;
-      const reasons: string[] = [];
+let score = 0;
+const reasons: string[] = [];
 
-      const genrePercent =
-        genreIds.length > 0 ? sharedGenreCount / genreIds.length : 0;
+const genreRatio =
+  genreIds.length > 0 ? sharedGenreCount / genreIds.length : 0;
 
-      score += genrePercent * 40;
+const genreScore = Math.round(genreRatio * 40);
 
-      if (sharedGenreCount > 0) {
-        reasons.push("Same Genre");
-      }
+score += genreScore;
+
+const sharedGenreNames = candidateGenreNames.filter((genreName: string) =>
+  currentGenreNames.includes(genreName),
+);
+
+if (sharedGenreCount === genreIds.length && genreIds.length > 0) {
+  reasons.push(`Strong genre match: ${sharedGenreNames.join(", ")} (+${genreScore})`);
+} else if (sharedGenreCount > 0) {
+  reasons.push(
+    `Partial genre match: ${sharedGenreCount}/${genreIds.length} shared (+${genreScore})`,
+  );
+}
 
       if (
         typedGame.franchiseId &&

@@ -227,10 +227,15 @@ export async function enrichSingleGame(gameId: number) {
       : game.coverArtUrl);
 
   const safeMetacriticScore =
-    manualMetacritic ??
-    (shouldUpdateMetacritic
-      ? game.metacriticScore ?? rawgData?.metacritic ?? null
-      : game.metacriticScore);
+  manualMetacritic ??
+  (shouldUpdateMetacritic
+    ? (
+        game.metacriticScore == null ||
+        game.metacriticScore === -1
+      )
+        ? rawgData?.metacritic ?? game.metacriticScore
+        : game.metacriticScore
+    : game.metacriticScore);
 
   const safeReleaseDate =
     manualReleaseDate ??

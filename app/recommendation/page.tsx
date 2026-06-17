@@ -2,6 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
+type TimeBucket = "Short" | "Medium" | "Long" | "Very Long" | "Unknown";
+
 type RecommendationUserGame = {
   id: number;
   status: string;
@@ -31,8 +33,24 @@ type RecommendationUserGame = {
 
 type Recommendation = RecommendationUserGame & {
   score: number;
+  baseScore: number;
+  timeBucket: TimeBucket;
   reasons: string[];
 };
+
+function getTimeBucket(hours: number | null): TimeBucket {
+  if (hours == null) return "Unknown";
+  if (hours < 8) return "Short";
+  if (hours <= 20) return "Medium";
+  if (hours <= 40) return "Long";
+  return "Very Long";
+}
+
+function getSeededJitter(id: number, score: number) {
+  const x = Math.sin(id * 9999) * 10000;
+  const random = x - Math.floor(x);
+  return score * (random * 0.1 - 0.05);
+}
 
 export default async function RecommendationsPage() {
   const userGames = (await prisma.userGame.findMany({
@@ -77,7 +95,10 @@ export default async function RecommendationsPage() {
   const activePlatformIds = new Set(
     currentlyPlaying
       .map((userGame: RecommendationUserGame) => userGame.platform?.id ?? null)
-      .filter((platformId: number | null): platformId is number => platformId != null),
+      .filter(
+        (platformId: number | null): platformId is number =>
+          platformId != null,
+      ),
   );
 
   const recentGenreIds = new Set(
@@ -101,6 +122,28 @@ export default async function RecommendationsPage() {
       ),
   );
 
+  const currentTimeBuckets = new Set(
+    currentlyPlaying
+      .map((userGame: RecommendationUserGame) =>
+        getTimeBucket(userGame.game.hltbMain),
+      )
+      .filter((bucket: TimeBucket) => bucket !== "Unknown"),
+  );
+
+  const playingMostlyShort =
+    currentlyPlaying.length > 0 &&
+    currentlyPlaying.every((userGame: RecommendationUserGame) => {
+      const bucket = getTimeBucket(userGame.game.hltbMain);
+      return bucket === "Short" || bucket === "Medium";
+    });
+
+  const playingMostlyLong =
+    currentlyPlaying.length > 0 &&
+    currentlyPlaying.some((userGame: RecommendationUserGame) => {
+      const bucket = getTimeBucket(userGame.game.hltbMain);
+      return bucket === "Long" || bucket === "Very Long";
+    });
+
   const backlogGames = userGames.filter(
     (userGame: RecommendationUserGame) => userGame.status === "BACKLOG",
   );
@@ -116,6 +159,7 @@ export default async function RecommendationsPage() {
           gameGenre.genre.id,
       );
       const franchiseId = userGame.game.franchise?.id ?? null;
+      const timeBucket = getTimeBucket(userGame.game.hltbMain);
 
       if (platformId != null && activePlatformIds.has(platformId)) {
         score -= 1000;
@@ -147,17 +191,42 @@ export default async function RecommendationsPage() {
         reasons.push("Has a known time estimate");
       }
 
+      if (timeBucket !== "Unknown" && !currentTimeBuckets.has(timeBucket)) {
+        score += 20;
+        reasons.push(`Different length from what you are currently playing: ${timeBucket}`);
+      } else if (timeBucket !== "Unknown") {
+        score -= 10;
+      }
+
       if (
-        userGame.game.hltbMain != null &&
-        userGame.game.hltbMain <= 20
+        playingMostlyShort &&
+        (timeBucket === "Long" || timeBucket === "Very Long")
       ) {
-        score += 10;
+        score += 15;
+        reasons.push("Longer game to balance your current shorter games");
+      }
+
+      if (
+        playingMostlyLong &&
+        (timeBucket === "Short" || timeBucket === "Medium")
+      ) {
+        score += 15;
+        reasons.push("Shorter game to balance your current longer game");
+      }
+
+      if (userGame.game.hltbMain != null && userGame.game.hltbMain <= 20) {
+        score += 5;
         reasons.push("Manageable length");
       }
 
+      const baseScore = score;
+      const finalScore = Math.round(score + getSeededJitter(userGame.id, score));
+
       return {
         ...userGame,
-        score,
+        score: finalScore,
+        baseScore,
+        timeBucket,
         reasons,
       };
     })
@@ -178,8 +247,8 @@ export default async function RecommendationsPage() {
         <h1 className="mt-4 text-4xl font-bold">What Should I Play Next?</h1>
         <p className="mt-2 max-w-3xl text-zinc-400">
           Three backlog picks that avoid platforms you are already playing on,
-          while aiming for different genres and franchises from your current or
-          recently completed games.
+          while aiming for different genres, franchises, and game lengths from
+          your current or recently completed games.
         </p>
       </div>
 
@@ -202,6 +271,7 @@ export default async function RecommendationsPage() {
               >
                 {userGame.game.title}
                 {userGame.platform ? ` • ${userGame.platform.name}` : ""}
+                {` • ${getTimeBucket(userGame.game.hltbMain)}`}
               </span>
             ))}
           </div>
@@ -255,18 +325,12 @@ export default async function RecommendationsPage() {
                   </h2>
 
                   <div className="mt-2 space-y-1 text-sm text-zinc-400">
-                    <p>
-                      {recommendation.platform?.name ?? "Unknown Platform"}
-                    </p>
-                    <p>
-                      {genres.length > 0 ? genres.join(", ") : "Unknown Genre"}
-                    </p>
-                    <p>
-                      {recommendation.game.franchise?.name ?? "No Franchise"}
-                    </p>
+                    <p>{recommendation.platform?.name ?? "Unknown Platform"}</p>
+                    <p>{genres.length > 0 ? genres.join(", ") : "Unknown Genre"}</p>
+                    <p>{recommendation.game.franchise?.name ?? "No Franchise"}</p>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
                     <InfoBox
                       label="Estimate"
                       value={
@@ -275,6 +339,7 @@ export default async function RecommendationsPage() {
                           : "N/A"
                       }
                     />
+                    <InfoBox label="Length" value={recommendation.timeBucket} />
                     <InfoBox label="Score" value={recommendation.score} />
                   </div>
 

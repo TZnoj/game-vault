@@ -16,23 +16,23 @@ type RecommendationUserGame = {
     name: string;
   } | null;
   game: {
-  id: number;
-  title: string;
-  coverArtUrl: string | null;
-  hltbMain: number | null;
-  isEndless: boolean;
-  franchise: {
     id: number;
-    name: string;
-  } | null;
-  gameGenres: {
-    genre: {
+    title: string;
+    coverArtUrl: string | null;
+    hltbMain: number | null;
+    isEndless: boolean;
+    franchise: {
       id: number;
       name: string;
-    };
-  }[];
+    } | null;
+    gameGenres: {
+      genre: {
+        id: number;
+        name: string;
+      };
+    }[];
+  };
 };
-}
 
 type Recommendation = RecommendationUserGame & {
   score: number;
@@ -50,7 +50,16 @@ function getTimeBucket(hours: number | null): TimeBucket {
 }
 
 function getRandomJitter(score: number) {
-  return score * (Math.random() * 0.1 - 0.05);
+  const flat = Math.floor(Math.random() * 11) - 5;
+  const percent = score * (Math.random() * 0.04 - 0.02);
+
+  return flat + percent;
+}
+
+function getGenreNames(userGame: RecommendationUserGame) {
+  return userGame.game.gameGenres
+    .map((gameGenre) => gameGenre.genre.name)
+    .sort();
 }
 
 export default async function RecommendationsPage() {
@@ -111,6 +120,14 @@ export default async function RecommendationsPage() {
     ),
   );
 
+  const recentGenreNames = [
+    ...new Set(
+      referenceGames.flatMap((userGame: RecommendationUserGame) =>
+        getGenreNames(userGame),
+      ),
+    ),
+  ].sort();
+
   const recentFranchiseIds = new Set(
     referenceGames
       .map(
@@ -146,9 +163,9 @@ export default async function RecommendationsPage() {
     });
 
   const backlogGames = userGames.filter(
-  (userGame: RecommendationUserGame) =>
-    userGame.status === "BACKLOG" && !userGame.game.isEndless,
-);
+    (userGame: RecommendationUserGame) =>
+      userGame.status === "BACKLOG" && !userGame.game.isEndless,
+  );
 
   const recommendations: Recommendation[] = backlogGames
     .map((userGame: RecommendationUserGame) => {
@@ -160,6 +177,11 @@ export default async function RecommendationsPage() {
         (gameGenre: { genre: { id: number; name: string } }) =>
           gameGenre.genre.id,
       );
+      const genreNames = getGenreNames(userGame);
+      const differentGenres = genreNames.filter(
+        (genreName: string) => !recentGenreNames.includes(genreName),
+      );
+
       const franchiseId = userGame.game.franchise?.id ?? null;
       const timeBucket = getTimeBucket(userGame.game.hltbMain);
 
@@ -176,7 +198,14 @@ export default async function RecommendationsPage() {
 
       if (!sharesRecentGenre) {
         score += 25;
-        reasons.push("Different genre from your current/recent games");
+        reasons.push(
+          `Different genres: ${
+            genreNames.length > 0 ? genreNames.join(", ") : "Unknown Genre"
+          }`,
+        );
+      } else if (differentGenres.length > 0) {
+        score += 10;
+        reasons.push(`Some different genres: ${differentGenres.join(", ")}`);
       } else {
         score -= 15;
       }
@@ -195,7 +224,9 @@ export default async function RecommendationsPage() {
 
       if (timeBucket !== "Unknown" && !currentTimeBuckets.has(timeBucket)) {
         score += 20;
-        reasons.push(`Different length from what you are currently playing: ${timeBucket}`);
+        reasons.push(
+          `Different length from what you are currently playing: ${timeBucket}`,
+        );
       } else if (timeBucket !== "Unknown") {
         score -= 10;
       }
@@ -277,6 +308,24 @@ export default async function RecommendationsPage() {
               </span>
             ))}
           </div>
+
+          {recentGenreNames.length > 0 && (
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-zinc-300">
+                Genres being avoided:
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {recentGenreNames.map((genreName: string) => (
+                  <span
+                    key={genreName}
+                    className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-400"
+                  >
+                    {genreName}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -291,9 +340,7 @@ export default async function RecommendationsPage() {
       ) : (
         <section className="grid gap-6 md:grid-cols-3">
           {recommendations.map((recommendation: Recommendation, index: number) => {
-            const genres = recommendation.game.gameGenres.map(
-              (gameGenre: { genre: { name: string } }) => gameGenre.genre.name,
-            );
+            const genres = getGenreNames(recommendation);
 
             return (
               <Link

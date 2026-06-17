@@ -38,6 +38,8 @@ type Recommendation = RecommendationUserGame & {
   score: number;
   baseScore: number;
   timeBucket: TimeBucket;
+  differentGenreCount: number;
+  totalGenreCount: number;
   reasons: string[];
 };
 
@@ -60,6 +62,15 @@ function getGenreNames(userGame: RecommendationUserGame) {
   return userGame.game.gameGenres
     .map((gameGenre) => gameGenre.genre.name)
     .sort();
+}
+
+function differentGenresCount(
+  recommendation: Recommendation,
+  recentGenreNames: string[],
+) {
+  return getGenreNames(recommendation).filter(
+    (genreName) => !recentGenreNames.includes(genreName),
+  ).length;
 }
 
 export default async function RecommendationsPage() {
@@ -192,22 +203,28 @@ export default async function RecommendationsPage() {
         reasons.push("Different platform from what you are currently playing");
       }
 
-      const sharesRecentGenre = genreIds.some((genreId: number) =>
-        recentGenreIds.has(genreId),
-      );
+      const differentGenreCount = differentGenres.length;
 
-      if (!sharesRecentGenre) {
-        score += 25;
+      const genreRatio =
+        genreNames.length > 0
+          ? differentGenreCount / genreNames.length
+          : 0;
+
+      const genreBonus = Math.round(genreRatio * 25);
+
+      score += genreBonus;
+
+      if (differentGenreCount === genreNames.length && genreNames.length > 0) {
         reasons.push(
-          `Different genres: ${
-            genreNames.length > 0 ? genreNames.join(", ") : "Unknown Genre"
-          }`,
+          `Completely different genres: ${genreNames.join(", ")} (+${genreBonus})`,
         );
-      } else if (differentGenres.length > 0) {
-        score += 10;
-        reasons.push(`Some different genres: ${differentGenres.join(", ")}`);
+      } else if (differentGenreCount > 0) {
+        reasons.push(
+          `${differentGenreCount}/${genreNames.length} genres are different (+${genreBonus})`,
+        );
       } else {
         score -= 15;
+        reasons.push("Very similar genres to recent games (-15)");
       }
 
       if (franchiseId == null || !recentFranchiseIds.has(franchiseId)) {
@@ -260,6 +277,8 @@ export default async function RecommendationsPage() {
         score: finalScore,
         baseScore,
         timeBucket,
+        differentGenreCount,
+        totalGenreCount: genreNames.length,
         reasons,
       };
     })
@@ -389,6 +408,10 @@ export default async function RecommendationsPage() {
                       }
                     />
                     <InfoBox label="Length" value={recommendation.timeBucket} />
+                    <InfoBox
+                      label="Genre Match"
+                      value={`${recommendation.differentGenreCount}/${recommendation.totalGenreCount}`}
+                    />
                     <InfoBox label="Score" value={recommendation.score} />
                   </div>
 

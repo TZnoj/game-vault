@@ -10,7 +10,7 @@ export function NavBar() {
 
         <nav className="flex flex-wrap items-center gap-2">
           <NavLink href="/">Library</NavLink>
-          <NavLink href="/recommendations">Recommendation</NavLink>
+          <NavLink href="/recommendation">Recommendations</NavLink>
           <NavLink href="/stats">Stats</NavLink>
           <NavLink href="/timeline">Timeline</NavLink>
           <NavLink href="/goals">Goals</NavLink>

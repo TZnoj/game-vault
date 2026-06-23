@@ -69,39 +69,6 @@ const backlogCopies = (await prisma.userGame.findMany({
 const backlogGames = dedupeBacklogCopies(backlogCopies);
 
 export default async function BacklogPage() {
-  const backlogGames = (await prisma.userGame.findMany({
-  where: {
-    status: {
-      in: [...UNFINISHED_STATUSES],
-    },
-    game: {
-      isEndless: false,
-      userGames: {
-        none: {
-          status: "COMPLETED",
-        },
-      },
-    },
-  },
-    include: {
-      platform: true,
-      game: {
-        include: {
-          franchise: true,
-          gameGenres: {
-            include: {
-              genre: true,
-            },
-          },
-        },
-      },
-    },
-    orderBy: {
-      game: {
-        title: "asc",
-      },
-    },
-  })) as BacklogUserGame[];
 
   const estimatedHoursRemaining = backlogGames.reduce(
   (sum: number, userGame: BacklogUserGame) =>

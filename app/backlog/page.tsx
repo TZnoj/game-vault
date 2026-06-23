@@ -32,6 +32,42 @@ type BacklogUserGame = {
   };
 };
 
+const backlogCopies = (await prisma.userGame.findMany({
+  where: {
+    status: {
+      in: [...UNFINISHED_STATUSES],
+    },
+    game: {
+      isEndless: false,
+      userGames: {
+        none: {
+          status: "COMPLETED",
+        },
+      },
+    },
+  },
+  include: {
+    platform: true,
+    game: {
+      include: {
+        franchise: true,
+        gameGenres: {
+          include: {
+            genre: true,
+          },
+        },
+      },
+    },
+  },
+  orderBy: {
+    game: {
+      title: "asc",
+    },
+  },
+})) as BacklogUserGame[];
+
+const backlogGames = dedupeBacklogCopies(backlogCopies);
+
 export default async function BacklogPage() {
   const backlogGames = (await prisma.userGame.findMany({
   where: {
@@ -347,4 +383,26 @@ function InfoBox({ label, value }: { label: string; value: string | number }) {
       <p className="font-semibold">{value}</p>
     </div>
   );
+}
+
+function dedupeBacklogCopies(userGames: BacklogUserGame[]) {
+  const byGameId = new Map<number, BacklogUserGame>();
+
+  for (const userGame of userGames) {
+    const existing = byGameId.get(userGame.game.id);
+
+    if (!existing) {
+      byGameId.set(userGame.game.id, userGame);
+      continue;
+    }
+
+    const existingHours = getEstimatedHours(existing);
+    const currentHours = getEstimatedHours(userGame);
+
+    if (currentHours > 0 && (existingHours === 0 || currentHours < existingHours)) {
+      byGameId.set(userGame.game.id, userGame);
+    }
+  }
+
+  return [...byGameId.values()];
 }

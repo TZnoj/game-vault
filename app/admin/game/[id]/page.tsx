@@ -280,6 +280,8 @@ revalidatePath("/admin");
 revalidatePath("/admin/missing-info");
 revalidatePath(`/game/${gameId}`);
 revalidatePath(`/admin/game/${gameId}`);
+revalidatePath("/backlog");
+
 
   redirect(`/game/${gameId}`);
 }

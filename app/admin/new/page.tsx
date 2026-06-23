@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { enrichSingleGame } from "@/lib/enrichGame";
+import { revalidatePath } from "next/cache";
 
 type PlatformOption = {
   id: number;
@@ -28,7 +29,6 @@ function parseNullableNumber(value: FormDataEntryValue | null) {
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
 
-  console.log("ADMIN SESSION EMAIL:", session?.user?.email ?? "NO SESSION");
 
   if (session?.user?.email !== "tylerznoj1995@gmail.com") {
     throw new Error(
@@ -134,7 +134,10 @@ async function createGame(formData: FormData) {
   }
 
 await enrichSingleGame(game.id);
-
+  revalidatePath("/");
+  revalidatePath("/backlog");
+  revalidatePath("/admin");
+  revalidatePath("/admin/missing-info");
   redirect(`/game/${game.id}`);
 }
 

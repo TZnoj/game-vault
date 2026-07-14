@@ -277,7 +277,7 @@ for (const genreId of genreIds) {
   revalidateGameData();
 
 
-  redirect(`/game/${gameId}`);
+  redirect(`/game/${gameId}?toast=game-saved`);
 }
 
 async function addCopy(formData: FormData) {
@@ -300,7 +300,7 @@ async function addCopy(formData: FormData) {
   });
 
   revalidateGameData();
-  redirect(`/admin/game/${gameId}`);
+  redirect(`/admin/game/${gameId}?toast=copy-added`);
 }
 
 async function deleteGame(formData: FormData) {
@@ -372,7 +372,7 @@ async function deleteGame(formData: FormData) {
   });
   revalidateGameData();
 
-  redirect("/admin");
+  redirect("/admin?toast=game-deleted");
 }
 
 export default async function EditGamePage({ params, searchParams }: PageProps) {

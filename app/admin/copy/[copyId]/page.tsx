@@ -143,7 +143,7 @@ async function updateCopy(formData: FormData) {
     });
   }
   revalidateGameData();
-  redirect(`/admin/game/${gameId}`);
+  redirect(`/admin/game/${gameId}?toast=copy-saved`);
 }
 
 async function deleteCopy(formData: FormData) {
@@ -181,7 +181,7 @@ await prisma.userGame.delete({
 });
 
 revalidateGameData();
-redirect(`/admin/game/${gameId}`);
+redirect(`/admin/game/${gameId}?toast=copy-deleted`);
 }
 
 export default async function EditCopyPage({ params }: PageProps) {

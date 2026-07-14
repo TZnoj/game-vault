@@ -135,7 +135,7 @@ async function createGame(formData: FormData) {
 
 await enrichSingleGame(game.id);
   revalidateGameData();
-  redirect(`/game/${game.id}`);
+  redirect(`/game/${game.id}?toast=game-created`);
 }
 
 export default async function NewGamePage() {

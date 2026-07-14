@@ -63,11 +63,13 @@ export function GameLibrary({
   initialGenre = "ALL",
   initialRating = "ALL",
   initialFranchise = "ALL",
+  showSummaryStats = true,
 }: {
   userGames: GameLibraryItem[];
   initialGenre?: string;
   initialRating?: string;
   initialFranchise?: string;
+  showSummaryStats?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"ALL" | GameStatus>("ALL");
@@ -246,15 +248,17 @@ const completedGames = completionEligibleGames.filter(
         </p>
       </div>
 
-      <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Shown Games" value={filteredGames.length} />
-        <StatCard label="Completed" value={completedGames.length} />
-        <StatCard label="Hours Played" value={totalHours.toFixed(1)} />
-        <StatCard
-          label="Average Rating"
-          value={averageRating != null ? averageRating.toFixed(1) : "N/A"}
-        />
-      </section>
+      {showSummaryStats ? (
+        <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Shown Games" value={filteredGames.length} />
+          <StatCard label="Completed" value={completedGames.length} />
+          <StatCard label="Hours Played" value={totalHours.toFixed(1)} />
+          <StatCard
+            label="Average Rating"
+            value={averageRating != null ? averageRating.toFixed(1) : "N/A"}
+          />
+        </section>
+      ) : null}
 
       <section className="mb-8 grid gap-4 md:grid-cols-3 xl:grid-cols-8">
         <input

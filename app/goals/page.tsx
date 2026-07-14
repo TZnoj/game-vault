@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
-const CURRENT_YEAR = new Date().getFullYear();
 const YEARLY_GAME_GOAL = 20;
 
 type GoalUserGame = {
@@ -20,6 +19,21 @@ type GoalUserGame = {
 };
 
 export default async function GoalsPage() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonthIndex = now.getMonth();
+  const monthStart = new Date(currentYear, currentMonthIndex, 1);
+  const nextMonthStart = new Date(currentYear, currentMonthIndex + 1, 1);
+  const currentMonthProgress = Math.min(
+    Math.max(
+      (now.getTime() - monthStart.getTime()) /
+        (nextMonthStart.getTime() - monthStart.getTime()),
+      0,
+    ),
+    1,
+  );
+  const elapsedMonths = currentMonthIndex + currentMonthProgress;
+
   const userGames = (await prisma.userGame.findMany({
     include: {
       game: true,
@@ -36,7 +50,12 @@ export default async function GoalsPage() {
       return false;
     }
 
-    return new Date(userGame.dateCompleted).getFullYear() === CURRENT_YEAR;
+    return new Date(userGame.dateCompleted).getFullYear() === currentYear;
+  }).sort((a, b) => {
+    return (
+      new Date(b.dateCompleted!).getTime() -
+      new Date(a.dateCompleted!).getTime()
+    );
   });
 
   const backlogGames = userGames.filter(
@@ -69,8 +88,8 @@ export default async function GoalsPage() {
     100,
   );
 
-  const currentMonth = new Date().getMonth() + 1;
-  const averageGamesPerMonth = completedThisYear.length / currentMonth;
+  const averageGamesPerMonth =
+    elapsedMonths > 0 ? completedThisYear.length / elapsedMonths : 0;
 
   const projectedGames = averageGamesPerMonth * 12;
 
@@ -79,10 +98,12 @@ export default async function GoalsPage() {
     0,
   );
 
-  const remainingMonths = Math.max(12 - currentMonth, 1);
+  const remainingMonths = Math.max(12 - elapsedMonths, 0);
 
   const requiredGamesPerMonth =
-    remainingGames > 0 ? remainingGames / remainingMonths : 0;
+    remainingGames > 0 && remainingMonths > 0
+      ? remainingGames / remainingMonths
+      : 0;
 
   const isOnTrack = projectedGames >= YEARLY_GAME_GOAL;
 
@@ -105,7 +126,7 @@ export default async function GoalsPage() {
         <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold">
-              {CURRENT_YEAR} Completion Goal
+              {currentYear} Completion Goal
             </h2>
             <p className="mt-1 text-zinc-400">
               {completedThisYear.length} / {YEARLY_GAME_GOAL} games completed
@@ -130,7 +151,10 @@ export default async function GoalsPage() {
           <p className="mt-1 text-3xl font-bold">
             {averageGamesPerMonth.toFixed(2)}
           </p>
-          <p className="mt-1 text-sm text-zinc-400">games / month</p>
+          <p className="mt-1 text-sm text-zinc-400">games / elapsed month</p>
+          <p className="mt-2 text-xs text-zinc-500">
+            {formatMonthProgress(now, currentMonthProgress)}
+          </p>
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
@@ -186,6 +210,16 @@ export default async function GoalsPage() {
         />
       </section>
 
+      <section className="mt-8 rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+        <h2 className="text-lg font-bold">How pace is calculated</h2>
+        <p className="mt-2 text-sm leading-6 text-zinc-400">
+          Current pace divides completed games by the exact portion of the year
+          elapsed. The current month counts fractionally, so an incomplete month
+          no longer counts as a full month. Completed games below are ordered by
+          completion date, newest first.
+        </p>
+      </section>
+
       <section className="mt-10">
         <h2 className="text-2xl font-bold">Completed This Year</h2>
 
@@ -230,6 +264,11 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
       <p className="mt-1 text-2xl font-bold">{value}</p>
     </div>
   );
+}
+
+function formatMonthProgress(date: Date, progress: number) {
+  const month = date.toLocaleDateString("en-CA", { month: "long" });
+  return `${(progress * 100).toFixed(1)}% of ${month} has elapsed`;
 }
 
 function formatDate(date: Date | string | null) {

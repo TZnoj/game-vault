@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { enrichSingleGame } from "@/lib/enrichGame";
-import { revalidatePath } from "next/cache";
+import { revalidateGameData } from "@/lib/revalidateGameData";
 
 type PlatformOption = {
   id: number;
@@ -134,10 +134,7 @@ async function createGame(formData: FormData) {
   }
 
 await enrichSingleGame(game.id);
-  revalidatePath("/");
-  revalidatePath("/backlog");
-  revalidatePath("/admin");
-  revalidatePath("/admin/missing-info");
+  revalidateGameData();
   redirect(`/game/${game.id}`);
 }
 

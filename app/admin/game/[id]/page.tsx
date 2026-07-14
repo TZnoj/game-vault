@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { revalidatePath } from "next/cache";
+import { revalidateGameData } from "@/lib/revalidateGameData";
 
 type PageProps = {
   params: Promise<{
@@ -274,13 +274,7 @@ for (const genreId of genreIds) {
     },
   });
 }
-
-revalidatePath("/");
-revalidatePath("/admin");
-revalidatePath("/admin/missing-info");
-revalidatePath(`/game/${gameId}`);
-revalidatePath(`/admin/game/${gameId}`);
-revalidatePath("/backlog");
+  revalidateGameData();
 
 
   redirect(`/game/${gameId}`);
@@ -305,6 +299,7 @@ async function addCopy(formData: FormData) {
     },
   });
 
+  revalidateGameData();
   redirect(`/admin/game/${gameId}`);
 }
 
@@ -375,10 +370,7 @@ async function deleteGame(formData: FormData) {
       id: gameId,
     },
   });
-
-revalidatePath("/");
-revalidatePath("/admin");
-revalidatePath("/admin/missing-info");
+  revalidateGameData();
 
   redirect("/admin");
 }

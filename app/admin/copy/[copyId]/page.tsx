@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { revalidatePath } from "next/cache";
+import { revalidateGameData } from "@/lib/revalidateGameData";
 
 type PageProps = {
   params: Promise<{
@@ -142,12 +142,7 @@ async function updateCopy(formData: FormData) {
       },
     });
   }
-
-  
-  revalidatePath("/");
-  revalidatePath("/backlog");
-  revalidatePath("/admin");
-  revalidatePath("/admin/missing-info");
+  revalidateGameData();
   redirect(`/admin/game/${gameId}`);
 }
 
@@ -185,6 +180,7 @@ await prisma.userGame.delete({
   },
 });
 
+revalidateGameData();
 redirect(`/admin/game/${gameId}`);
 }
 

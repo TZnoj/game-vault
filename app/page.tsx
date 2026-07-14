@@ -93,7 +93,7 @@ export default async function Home({ searchParams }: PageProps) {
         title: userGame.game.title,
         coverArtUrl: userGame.game.coverArtUrl,
         activity: getActivityLabel(userGame.status, reviewDate, updatedAt),
-        updatedAt,
+        updatedAt: updatedAt.toISOString(),
       };
     })
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())

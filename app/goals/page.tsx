@@ -138,7 +138,16 @@ export default async function GoalsPage() {
     remainingGames > 0 && remainingMonths > 0
       ? remainingGames / remainingMonths
       : 0;
-  const isOnTrack = projectedGames >= YEARLY_GAME_GOAL;
+  const roundedProjectedGames = Math.round(projectedGames);
+  const projectedDifference = roundedProjectedGames - YEARLY_GAME_GOAL;
+  const isOnTrack = projectedDifference >= 0;
+  const currentMonthCompleted = monthlyTotals[currentMonthIndex]?.count ?? 0;
+  const currentMonthTarget =
+    remainingGames === 0 ? 0 : Math.max(Math.ceil(requiredGamesPerMonth), 1);
+  const currentMonthNeeded = Math.max(
+    currentMonthTarget - currentMonthCompleted,
+    0,
+  );
 
   return (
     <main className="min-h-screen bg-zinc-950 px-4 py-8 text-white sm:px-6 lg:px-8">
@@ -199,8 +208,15 @@ export default async function GoalsPage() {
           <PaceCard
             label="Current Pace"
             value={`${projectedGames.toFixed(1)} games/year`}
-            detail={`${averageGamesPerMonth.toFixed(2)} per elapsed month`}
+            detail={`${averageGamesPerMonth.toFixed(2)} completions per elapsed month`}
           />
+
+          <ProjectionCard
+            projected={roundedProjectedGames}
+            goal={YEARLY_GAME_GOAL}
+            difference={projectedDifference}
+          />
+
           <PaceCard
             label="Need"
             value={
@@ -211,20 +227,20 @@ export default async function GoalsPage() {
             detail={
               remainingGames === 0
                 ? `${completedThisYear.length - YEARLY_GAME_GOAL} above goal`
-                : `${remainingGames} games over ${remainingMonths.toFixed(1)} months`
+                : `${remainingGames} remaining over ${remainingMonths.toFixed(1)} months`
             }
           />
+
           <PaceCard
-            label="Current Month Progress"
-            value={`${(currentMonthProgress * 100).toFixed(0)}%`}
-            detail={`of ${MONTH_NAMES[currentMonthIndex]} has elapsed`}
-          />
-          <PaceCard
-            label="Predicted Finish"
-            value={`${Math.round(projectedGames)} games`}
-            detail={`${projectedGames >= YEARLY_GAME_GOAL ? "+" : ""}${(
-              projectedGames - YEARLY_GAME_GOAL
-            ).toFixed(1)} versus goal`}
+            label="Current Month"
+            value={`${(currentMonthProgress * 100).toFixed(0)}% complete`}
+            detail={
+              remainingGames === 0
+                ? `${currentMonthCompleted} completed in ${MONTH_NAMES[currentMonthIndex]}`
+                : currentMonthNeeded === 0
+                  ? `${currentMonthCompleted} completed • monthly target reached`
+                  : `${currentMonthCompleted} completed • ${currentMonthNeeded} more to reach this month's target`
+            }
           />
         </section>
 
@@ -383,6 +399,49 @@ export default async function GoalsPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+
+function ProjectionCard({
+  projected,
+  goal,
+  difference,
+}: {
+  projected: number;
+  goal: number;
+  difference: number;
+}) {
+  const progress = clamp((projected / goal) * 100, 0, 100);
+  const differenceText =
+    difference === 0
+      ? "Exactly on goal"
+      : difference > 0
+        ? `${difference} ${difference === 1 ? "game" : "games"} ahead of goal`
+        : `${Math.abs(difference)} ${Math.abs(difference) === 1 ? "game" : "games"} short of goal`;
+
+  return (
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+        On Pace For
+      </p>
+      <p className="mt-3 text-2xl font-bold tracking-tight text-zinc-100">
+        {projected} <span className="text-base text-zinc-500">/ {goal}</span>
+      </p>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          className="h-full rounded-full bg-zinc-200 transition-[width] duration-500"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <p
+        className={`mt-2 text-sm ${
+          difference >= 0 ? "text-emerald-400" : "text-amber-400"
+        }`}
+      >
+        {differenceText}
+      </p>
+    </div>
   );
 }
 

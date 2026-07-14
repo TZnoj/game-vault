@@ -5,6 +5,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { enrichSingleGame } from "@/lib/enrichGame";
 import { revalidateGameData } from "@/lib/revalidateGameData";
+import { AdminEditForm } from "@/components/admin/AdminEditForm";
+import { InlineRatingInput } from "@/components/admin/InlineRatingInput";
+import { QuickStatusButtons } from "@/components/admin/QuickStatusButtons";
 
 type PlatformOption = {
   id: number;
@@ -135,7 +138,7 @@ async function createGame(formData: FormData) {
 
 await enrichSingleGame(game.id);
   revalidateGameData();
-  redirect(`/game/${game.id}?toast=game-created`);
+  redirect(`/game/${game.id}`);
 }
 
 export default async function NewGamePage() {
@@ -178,7 +181,12 @@ return (
       Add a new game directly to your collection.
     </p>
 
-    <form action={createGame} className="mt-8 max-w-5xl space-y-6">
+    <AdminEditForm
+      action={createGame}
+      cancelHref="/admin"
+      submitLabel="Add Game"
+      className="mt-8 max-w-5xl space-y-6"
+    >
       <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
         <h2 className="mb-4 text-xl font-bold">Game Metadata</h2>
 
@@ -251,19 +259,8 @@ return (
         <h2 className="mb-4 text-xl font-bold">First Copy</h2>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Status">
-            <select
-              name="status"
-              defaultValue="BACKLOG"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-zinc-400"
-            >
-              <option value="BACKLOG">Backlog</option>
-              <option value="PLAYING">Playing</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="ONHOLD">On Hold</option>
-              <option value="DROPPED">Dropped</option>
-              <option value="REPLAYING">Replaying</option>
-            </select>
+          <Field label="Quick Status">
+            <QuickStatusButtons defaultValue="BACKLOG" />
           </Field>
 
           <Field label="Platform">
@@ -305,23 +302,23 @@ return (
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Field label="Overall">
-            <RatingInput name="overallRating" />
+            <InlineRatingInput name="overallRating" />
           </Field>
 
           <Field label="Gameplay">
-            <RatingInput name="gameplayRating" />
+            <InlineRatingInput name="gameplayRating" />
           </Field>
 
           <Field label="Story">
-            <RatingInput name="storyRating" />
+            <InlineRatingInput name="storyRating" />
           </Field>
 
           <Field label="Art">
-            <RatingInput name="artRating" />
+            <InlineRatingInput name="artRating" />
           </Field>
 
           <Field label="Music">
-            <RatingInput name="musicRating" />
+            <InlineRatingInput name="musicRating" />
           </Field>
         </div>
 
@@ -352,13 +349,7 @@ return (
         </div>
       </section>
 
-      <button
-        type="submit"
-        className="rounded-lg border border-zinc-700 bg-zinc-100 px-5 py-3 font-semibold text-zinc-950 hover:bg-white"
-      >
-        Add Game
-      </button>
-    </form>
+    </AdminEditForm>
   </main>
 );
 }
@@ -375,18 +366,5 @@ function Field({
       <p className="mb-2 text-sm font-medium text-zinc-400">{label}</p>
       {children}
     </label>
-  );
-}
-
-function RatingInput({ name }: { name: string }) {
-  return (
-    <input
-      name={name}
-      type="number"
-      step="0.5"
-      min="0"
-      max="10"
-      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-white outline-none focus:border-zinc-400"
-    />
   );
 }

@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidateGameData } from "@/lib/revalidateGameData";
+import { AdminEditForm } from "@/components/admin/AdminEditForm";
+import { AutoSaveNotes } from "@/components/admin/AutoSaveNotes";
+import { InlineRatingInput } from "@/components/admin/InlineRatingInput";
+import { QuickStatusButtons } from "@/components/admin/QuickStatusButtons";
 
 type PageProps = {
   params: Promise<{
@@ -143,7 +147,39 @@ async function updateCopy(formData: FormData) {
     });
   }
   revalidateGameData();
-  redirect(`/admin/game/${gameId}?toast=copy-saved`);
+  redirect(`/admin/game/${gameId}`);
+}
+
+async function autoSaveNotes(formData: FormData) {
+  "use server";
+
+  await requireAdmin();
+
+  const gameId = Number(formData.get("gameId"));
+  const copyId = Number(formData.get("copyId"));
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  if (!Number.isInteger(gameId) || !Number.isInteger(copyId)) {
+    throw new Error("Invalid IDs");
+  }
+
+  const existingReview = await prisma.review.findFirst({
+    where: { userGameId: copyId },
+    orderBy: { reviewDate: "desc" },
+  });
+
+  if (existingReview) {
+    await prisma.review.update({
+      where: { id: existingReview.id },
+      data: { notes: notes || null },
+    });
+  } else if (notes) {
+    await prisma.review.create({
+      data: { userGameId: copyId, notes },
+    });
+  }
+
+  revalidateGameData();
 }
 
 async function deleteCopy(formData: FormData) {
@@ -181,7 +217,7 @@ await prisma.userGame.delete({
 });
 
 revalidateGameData();
-redirect(`/admin/game/${gameId}?toast=copy-deleted`);
+redirect(`/admin/game/${gameId}`);
 }
 
 export default async function EditCopyPage({ params }: PageProps) {
@@ -244,7 +280,12 @@ const gameId = userGame.gameId;
         <h1 className="text-4xl font-bold">Edit Copy</h1>
         <p className="mt-2 text-zinc-400">{userGame.game.title}</p>
 
-        <form action={updateCopy} className="mt-8 space-y-6">
+        <AdminEditForm
+          action={updateCopy}
+          cancelHref={`/admin/game/${gameId}`}
+          submitLabel="Save Copy"
+          className="mt-8 space-y-6"
+        >
           <input type="hidden" name="gameId" value={gameId} />
           <input type="hidden" name="copyId" value={userGame.id} />
 
@@ -263,19 +304,8 @@ const gameId = userGame.gameId;
             </select>
           </Field>
 
-          <Field label="Status">
-            <select
-              name="status"
-              defaultValue={userGame.status}
-              className="input"
-            >
-              <option value="BACKLOG">Backlog</option>
-              <option value="PLAYING">Playing</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="ONHOLD">On Hold</option>
-              <option value="DROPPED">Dropped</option>
-              <option value="REPLAYING">Replaying</option>
-            </select>
+          <Field label="Quick Status">
+            <QuickStatusButtons defaultValue={userGame.status} />
           </Field>
 
           <Field label="Hours Played">
@@ -311,35 +341,35 @@ const gameId = userGame.gameId;
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <Field label="Overall">
-                <RatingInput
+                <InlineRatingInput
                   name="overallRating"
                   defaultValue={review?.overallRating}
                 />
               </Field>
 
               <Field label="Gameplay">
-                <RatingInput
+                <InlineRatingInput
                   name="gameplayRating"
                   defaultValue={review?.gameplayRating}
                 />
               </Field>
 
               <Field label="Story">
-                <RatingInput
+                <InlineRatingInput
                   name="storyRating"
                   defaultValue={review?.storyRating}
                 />
               </Field>
 
               <Field label="Art">
-                <RatingInput
+                <InlineRatingInput
                   name="artRating"
                   defaultValue={review?.artRating}
                 />
               </Field>
 
               <Field label="Music">
-                <RatingInput
+                <InlineRatingInput
                   name="musicRating"
                   defaultValue={review?.musicRating}
                 />
@@ -347,31 +377,19 @@ const gameId = userGame.gameId;
             </div>
 
             <Field label="Notes">
-              <textarea
-                name="notes"
-                rows={6}
+              <AutoSaveNotes
+                action={autoSaveNotes}
+                gameId={gameId}
+                copyId={userGame.id}
                 defaultValue={review?.notes ?? ""}
-                className="input mt-4 min-h-[180px] w-full resize-y"
               />
             </Field>
           </section>
 
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              className="rounded-lg border border-zinc-700 bg-zinc-100 px-5 py-3 font-semibold text-zinc-950 hover:bg-white"
-            >
-              Save Copy
-            </button>
-
-            <Link
-              href={`/admin/game/${gameId}`}
-              className="rounded-lg border border-zinc-700 bg-zinc-900 px-5 py-3 font-semibold hover:border-zinc-400"
-            >
-              Cancel
-            </Link>
-          </div>
-        </form>
+          <p className="text-xs text-zinc-500">
+            Rating fields save when you press Enter. Use Ctrl+S at any time to save the full copy.
+          </p>
+        </AdminEditForm>
 
         <section className="mt-10 rounded-xl border border-red-900/60 bg-red-950/20 p-5">
           <h2 className="text-xl font-bold text-red-300">Danger Zone</h2>
@@ -415,24 +433,4 @@ function formatDateInput(date: Date | string | null | undefined) {
   if (!date) return "";
 
   return new Date(date).toISOString().slice(0, 10);
-}
-
-function RatingInput({
-  name,
-  defaultValue,
-}: {
-  name: string;
-  defaultValue?: number | null;
-}) {
-  return (
-    <input
-      name={name}
-      type="number"
-      step="0.5"
-      min="0"
-      max="10"
-      defaultValue={defaultValue ?? ""}
-      className="input"
-    />
-  );
 }

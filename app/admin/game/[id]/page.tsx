@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidateGameData } from "@/lib/revalidateGameData";
+import { AdminEditForm } from "@/components/admin/AdminEditForm";
 
 type PageProps = {
   params: Promise<{
@@ -277,7 +278,7 @@ for (const genreId of genreIds) {
   revalidateGameData();
 
 
-  redirect(`/game/${gameId}?toast=game-saved`);
+  redirect(`/game/${gameId}`);
 }
 
 async function addCopy(formData: FormData) {
@@ -300,7 +301,7 @@ async function addCopy(formData: FormData) {
   });
 
   revalidateGameData();
-  redirect(`/admin/game/${gameId}?toast=copy-added`);
+  redirect(`/admin/game/${gameId}`);
 }
 
 async function deleteGame(formData: FormData) {
@@ -372,7 +373,7 @@ async function deleteGame(formData: FormData) {
   });
   revalidateGameData();
 
-  redirect("/admin?toast=game-deleted");
+  redirect("/admin");
 }
 
 export default async function EditGamePage({ params, searchParams }: PageProps) {
@@ -439,6 +440,19 @@ const franchises: FranchiseOption[] = await prisma.franchise.findMany({
   },
 });
 
+  const [previousGame, nextGame] = await Promise.all([
+    prisma.game.findFirst({
+      where: { title: { lt: game.title } },
+      orderBy: { title: "desc" },
+      select: { id: true, title: true },
+    }),
+    prisma.game.findFirst({
+      where: { title: { gt: game.title } },
+      orderBy: { title: "asc" },
+      select: { id: true, title: true },
+    }),
+  ]);
+
   const coverChoices = await getIgdbCoverChoices(game.title);
 
   const selectedGenreIds = new Set(
@@ -466,13 +480,45 @@ const franchises: FranchiseOption[] = await prisma.franchise.findMany({
 
         <h1 className="text-4xl font-bold">Edit Game</h1>
         <p className="mt-2 text-zinc-400">{game.title}</p>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          {previousGame ? (
+            <Link
+              href={`/admin/game/${previousGame.id}`}
+              className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 hover:border-zinc-600"
+              title={previousGame.title}
+            >
+              <span className="text-xs text-zinc-500">← Previous game</span>
+              <span className="mt-1 block truncate font-semibold">{previousGame.title}</span>
+            </Link>
+          ) : (
+            <div className="rounded-xl border border-zinc-900 p-4 text-zinc-600">No previous game</div>
+          )}
+          {nextGame ? (
+            <Link
+              href={`/admin/game/${nextGame.id}`}
+              className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-right hover:border-zinc-600"
+              title={nextGame.title}
+            >
+              <span className="text-xs text-zinc-500">Next game →</span>
+              <span className="mt-1 block truncate font-semibold">{nextGame.title}</span>
+            </Link>
+          ) : (
+            <div className="rounded-xl border border-zinc-900 p-4 text-right text-zinc-600">No next game</div>
+          )}
+        </div>
         {error === "last-copy" && (
   <div className="mt-6 rounded-xl border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-200">
     You cannot delete the final copy from this game. Delete the game itself from the Danger Zone instead.
   </div>
 )}
 
-        <form action={updateGame} className="mt-8 space-y-8">
+        <AdminEditForm
+          action={updateGame}
+          cancelHref={`/game/${game.id}`}
+          submitLabel="Save Changes"
+          className="mt-8 space-y-8"
+        >
           <input type="hidden" name="gameId" value={game.id} />
 
           <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
@@ -784,22 +830,10 @@ const franchises: FranchiseOption[] = await prisma.franchise.findMany({
 </label>
             </div>
           </section>
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              className="rounded-lg border border-zinc-700 bg-zinc-100 px-5 py-3 font-semibold text-zinc-950 hover:bg-white"
-            >
-              Save Changes
-            </button>
-
-            <Link
-              href={`/game/${game.id}`}
-              className="rounded-lg border border-zinc-700 bg-zinc-900 px-5 py-3 font-semibold hover:border-zinc-400"
-            >
-              Cancel
-            </Link>
-          </div>
-        </form>
+          <p className="text-xs text-zinc-500">
+            Ctrl+S saves from anywhere on this page. Escape cancels and returns to the game page.
+          </p>
+        </AdminEditForm>
 
         <section className="mt-10 rounded-xl border border-red-900/60 bg-red-950/20 p-5">
         

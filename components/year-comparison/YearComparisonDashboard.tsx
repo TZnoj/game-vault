@@ -496,6 +496,18 @@ function WeightedRatingModal({
   stats: YearStats;
   onClose: () => void;
 }) {
+  const details = stats.weightedDetails;
+  const maxWeight = Math.max(1, ...details.map((detail) => detail.weight));
+  const mostInfluential = [...details].sort(
+    (a, b) => b.weightShare - a.weightShare || a.entry.title.localeCompare(b.entry.title),
+  )[0];
+  const biggestPositive = [...details].sort(
+    (a, b) => b.impact - a.impact || b.weightShare - a.weightShare,
+  )[0];
+  const biggestNegative = [...details].sort(
+    (a, b) => a.impact - b.impact || b.weightShare - a.weightShare,
+  )[0];
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
@@ -516,7 +528,7 @@ function WeightedRatingModal({
               Time-weighted rating: {formatDecimal(stats.weightedRating)}/10
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">
-              Weight equals √time. “Impact” is how much this game changes the final yearly score compared with calculating the year without it.
+              Weight equals √time. Experience Weight shows each game&apos;s share of the year, while Year Impact shows how much including that game raises or lowers the final rating.
             </p>
           </div>
           <button
@@ -529,21 +541,21 @@ function WeightedRatingModal({
         </div>
 
         <div className="max-h-[calc(90vh-145px)] overflow-y-auto p-4 sm:p-7">
-          {stats.weightedDetails.length === 0 ? (
+          {details.length === 0 ? (
             <p className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 text-zinc-400">
               No rated games are available for this year.
             </p>
           ) : (
             <>
               <div className="mb-5 grid gap-3 sm:grid-cols-3">
-                <ModalMetric label="Rated games" value={stats.weightedDetails.length.toString()} />
+                <ModalMetric label="Rated games" value={details.length.toString()} />
                 <ModalMetric
                   label="Total √time weight"
-                  value={stats.weightedDetails.reduce((sum, item) => sum + item.weight, 0).toFixed(2)}
+                  value={details.reduce((sum, item) => sum + item.weight, 0).toFixed(2)}
                 />
                 <ModalMetric
                   label="Largest influence"
-                  value={stats.weightedDetails[0]?.entry.title ?? "N/A"}
+                  value={details[0]?.entry.title ?? "N/A"}
                   compact
                 />
               </div>
@@ -554,15 +566,23 @@ function WeightedRatingModal({
                     <tr>
                       <th className="px-4 py-3">Game</th>
                       <th className="px-4 py-3">Rating</th>
-                      <th className="px-4 py-3">Time used</th>
-                      <th className="px-4 py-3">√time weight</th>
-                      <th className="px-4 py-3">Weight share</th>
-                      <th className="px-4 py-3">Score contribution</th>
-                      <th className="px-4 py-3">Impact</th>
+                      <th className="px-4 py-3">Hours</th>
+                      <th
+                        className="px-4 py-3"
+                        title="How much of your weighted gaming year this game represents. The percentage uses √time, while the bar is scaled relative to the most heavily weighted game in this year."
+                      >
+                        Experience Weight <span className="normal-case text-zinc-600">ⓘ</span>
+                      </th>
+                      <th
+                        className="px-4 py-3"
+                        title="How much including this game raises or lowers the final time-weighted yearly rating compared with calculating the year without it."
+                      >
+                        Year Impact <span className="normal-case text-zinc-600">ⓘ</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800">
-                    {stats.weightedDetails.map((detail) => (
+                    {details.map((detail) => (
                       <tr key={detail.entry.id} className="bg-zinc-950/60 hover:bg-zinc-900/70">
                         <td className="px-4 py-4">
                           <Link
@@ -575,9 +595,9 @@ function WeightedRatingModal({
                         </td>
                         <td className="px-4 py-4 font-bold">{detail.entry.overallRating.toFixed(1)}/10</td>
                         <td className="px-4 py-4">{detail.time.toFixed(1)}h</td>
-                        <td className="px-4 py-4">{detail.weight.toFixed(2)}</td>
-                        <td className="px-4 py-4">{(detail.weightShare * 100).toFixed(1)}%</td>
-                        <td className="px-4 py-4">{detail.weightedPoints.toFixed(2)} pts</td>
+                        <td className="min-w-64 px-4 py-4">
+                          <ExperienceWeightBar detail={detail} maxWeight={maxWeight} />
+                        </td>
                         <td className="px-4 py-4">
                           <ImpactPill impact={detail.impact} />
                         </td>
@@ -588,7 +608,7 @@ function WeightedRatingModal({
               </div>
 
               <div className="space-y-3 lg:hidden">
-                {stats.weightedDetails.map((detail) => (
+                {details.map((detail) => (
                   <article key={detail.entry.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/55 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -601,17 +621,48 @@ function WeightedRatingModal({
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                       <SmallDetail label="Rating" value={`${detail.entry.overallRating.toFixed(1)}/10`} />
-                      <SmallDetail label="Time" value={`${detail.time.toFixed(1)}h`} />
-                      <SmallDetail label="√time weight" value={detail.weight.toFixed(2)} />
-                      <SmallDetail label="Weight share" value={`${(detail.weightShare * 100).toFixed(1)}%`} />
-                      <SmallDetail label="Score contribution" value={`${detail.weightedPoints.toFixed(2)} pts`} />
+                      <SmallDetail label="Hours" value={`${detail.time.toFixed(1)}h`} />
+                    </div>
+                    <div className="mt-4">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p
+                          className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500"
+                          title="The percentage is this game's share of total √time weight. The bar is relative to the largest game weight in the year."
+                        >
+                          Experience Weight ⓘ
+                        </p>
+                      </div>
+                      <ExperienceWeightBar detail={detail} maxWeight={maxWeight} />
                     </div>
                   </article>
                 ))}
               </div>
 
+              <div className="mt-6 grid gap-3 md:grid-cols-3">
+                <ImpactSummaryCard
+                  label="Most Influential"
+                  game={mostInfluential?.entry.title ?? "N/A"}
+                  primary={mostInfluential ? `${(mostInfluential.weightShare * 100).toFixed(1)}% of your weighted year` : "N/A"}
+                  secondary={mostInfluential ? `${formatImpact(mostInfluential.impact)} impact` : ""}
+                />
+                <ImpactSummaryCard
+                  label="Biggest Positive"
+                  game={biggestPositive?.entry.title ?? "N/A"}
+                  primary={biggestPositive ? formatImpact(biggestPositive.impact) : "N/A"}
+                  secondary="Raised your yearly rating the most."
+                  impact={biggestPositive?.impact}
+                />
+                <ImpactSummaryCard
+                  label="Biggest Negative"
+                  game={biggestNegative?.entry.title ?? "N/A"}
+                  primary={biggestNegative ? formatImpact(biggestNegative.impact) : "N/A"}
+                  secondary="Lowered your yearly rating the most."
+                  impact={biggestNegative?.impact}
+                />
+              </div>
+
               <p className="mt-5 text-xs leading-5 text-zinc-500">
-                Score contribution values add up to the final weighted rating. Impact values do not add together; each is a separate leave-one-out comparison.
+                Experience Weight percentages total 100%. Their bars are relative to the largest √time weight in this year, so the most heavily weighted game always has a full bar. Year Impact values are separate leave-one-out comparisons and should not be added together.
               </p>
             </>
           )}
@@ -621,24 +672,98 @@ function WeightedRatingModal({
   );
 }
 
-function ImpactPill({ impact }: { impact: number }) {
+function ExperienceWeightBar({
+  detail,
+  maxWeight,
+}: {
+  detail: WeightedRatingDetail;
+  maxWeight: number;
+}) {
+  const relativeWidth = maxWeight > 0 ? (detail.weight / maxWeight) * 100 : 0;
+  const share = detail.weightShare * 100;
+
+  return (
+    <div title={`${share.toFixed(1)}% of total √time weight; bar length is relative to the largest game weight`}>
+      <div className="flex items-center gap-3">
+        <div className="h-2.5 min-w-24 flex-1 overflow-hidden rounded-full bg-zinc-800">
+          <div
+            className="h-full rounded-full bg-violet-500 transition-all"
+            style={{ width: `${Math.max(relativeWidth, relativeWidth > 0 ? 3 : 0)}%` }}
+          />
+        </div>
+        <span className="w-12 text-right text-xs font-bold text-zinc-200">
+          {share.toFixed(1)}%
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] text-zinc-600">√time weight {detail.weight.toFixed(2)}</p>
+    </div>
+  );
+}
+
+function formatImpact(impact: number) {
   const rounded = Math.abs(impact) < 0.005 ? 0 : impact;
-  const positive = rounded > 0;
-  const negative = rounded < 0;
+  return `${rounded > 0 ? "+" : ""}${rounded.toFixed(2)}`;
+}
+
+function impactTone(impact: number) {
+  if (impact >= 0.5) return "strong-positive";
+  if (impact >= 0.1) return "positive";
+  if (impact <= -0.5) return "strong-negative";
+  if (impact <= -0.1) return "negative";
+  return "neutral";
+}
+
+function ImpactPill({ impact }: { impact: number }) {
+  const tone = impactTone(impact);
+  const classes =
+    tone === "strong-positive"
+      ? "border-emerald-400/50 bg-emerald-400/15 text-emerald-200"
+      : tone === "positive"
+        ? "border-lime-500/35 bg-lime-500/10 text-lime-300"
+        : tone === "strong-negative"
+          ? "border-rose-500/45 bg-rose-500/15 text-rose-200"
+          : tone === "negative"
+            ? "border-orange-500/40 bg-orange-500/10 text-orange-300"
+            : "border-zinc-700 bg-zinc-800 text-zinc-300";
 
   return (
     <span
-      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${
-        positive
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-          : negative
-            ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
-            : "border-zinc-700 bg-zinc-800 text-zinc-300"
-      }`}
+      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${classes}`}
       title="Change in the yearly weighted rating caused by including this game"
     >
-      {positive ? "+" : ""}{rounded.toFixed(2)}
+      {formatImpact(impact)}
     </span>
+  );
+}
+
+function ImpactSummaryCard({
+  label,
+  game,
+  primary,
+  secondary,
+  impact,
+}: {
+  label: string;
+  game: string;
+  primary: string;
+  secondary: string;
+  impact?: number;
+}) {
+  const tone = impact == null ? "neutral" : impactTone(impact);
+  const border =
+    tone === "strong-positive" || tone === "positive"
+      ? "border-emerald-500/30"
+      : tone === "strong-negative" || tone === "negative"
+        ? "border-rose-500/30"
+        : "border-violet-500/25";
+
+  return (
+    <article className={`rounded-2xl border ${border} bg-zinc-900/60 p-4`}>
+      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">{label}</p>
+      <p className="mt-2 font-black text-white">{game}</p>
+      <p className="mt-2 text-sm font-bold text-zinc-200">{primary}</p>
+      <p className="mt-1 text-xs leading-5 text-zinc-500">{secondary}</p>
+    </article>
   );
 }
 

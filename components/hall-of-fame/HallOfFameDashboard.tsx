@@ -82,8 +82,8 @@ export function HallOfFameDashboard({ entries }: { entries: Entry[] }) {
 
   const masterpieceTiers = [
     { title: "Perfect Scores", subtitle: "10/10", entries: ranked.filter((entry) => entry.overallRating === 10) },
-    { title: "Near Masterpieces", subtitle: "9.5–9.9", entries: ranked.filter((entry) => entry.overallRating >= 9.5 && entry.overallRating < 10) },
-    { title: "Hall of Excellence", subtitle: "9.0–9.4", entries: ranked.filter((entry) => entry.overallRating >= 9 && entry.overallRating < 9.5) },
+    { title: "Near Masterpieces", subtitle: "9/10", entries: ranked.filter((entry) => entry.overallRating === 9) },
+    { title: "Hall of Excellence", subtitle: "8/10", entries: ranked.filter((entry) => entry.overallRating === 8) },
   ];
 
   const categories: Category[] = [

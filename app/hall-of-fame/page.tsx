@@ -24,6 +24,7 @@ function latestReview(reviews: ReviewShape[]) {
 export default async function HallOfFamePage() {
   const games = await prisma.game.findMany({
     include: {
+      metadataOverride: true,
       franchise: true,
       gameGenres: { include: { genre: true } },
       gamePlatforms: { include: { platform: true } },

@@ -30,7 +30,7 @@ export default async function RecommendationPage() {
       <h1 className="mt-2 text-4xl font-black">Recommendations</h1>
       <p className="mt-2 max-w-3xl text-zinc-400">Built from games you completed and rated highly. Completed, playing, replaying, and duplicate copies are not recommended.</p>
       <div className="mt-10">
-        <RecommendedNext collection={recommendedNext} />
+        <RecommendedNext data={recommendedNext} />
       </div>
       <div className="mt-12 space-y-12">
         {sections.map((section) => {

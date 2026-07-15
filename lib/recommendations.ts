@@ -8,11 +8,9 @@ export type RecommendationGame = {
   gameGenres: { genreId: number; genre: { id: number; name: string } }[];
   userGames: {
     status: string;
+    dateStarted: Date | string | null;
+    dateCompleted: Date | string | null;
     hoursPlayed: number | null;
-    dateStarted?: Date | string | null;
-    dateCompleted?: Date | string | null;
-    createdAt?: Date | string;
-    updatedAt?: Date | string;
     reviews: {
       overallRating: number | null;
       gameplayRating: number | null;
@@ -35,6 +33,13 @@ export type RecommendationResult = {
     art: number;
     length: number;
   };
+};
+
+export type RecommendedNextData = {
+  recentSources: { id: number; title: string; kind: "PLAYING" | "RECENTLY_COMPLETED" }[];
+  recentGenres: string[];
+  rankedPool: RecommendationResult[];
+  surprisePool: RecommendationResult[];
 };
 
 const STANDALONE = "standalone";
@@ -107,7 +112,6 @@ function categorySimilarity(sourceTags: string[], candidateTags: string[], terms
 
 function preferenceBoost(rating: number | null | undefined) {
   if (rating == null) return 1;
-  // Ratings affect confidence only slightly. They do not invent candidate ratings.
   return 0.9 + (Math.max(0, Math.min(10, rating)) / 10) * 0.2;
 }
 
@@ -132,7 +136,6 @@ function scorePair(source: RecommendationGame, candidate: RecommendationGame): R
   const sourceReview = latestReview(source);
   const genreScore = overlapScore(sourceGenres, candidateGenres);
 
-  // These are tag-based estimates. Candidate games in the backlog usually have no review scores yet.
   const gameplay = clamp(
     categorySimilarity(sourceGenres, candidateGenres, GAMEPLAY_TERMS, genreScore) *
       preferenceBoost(sourceReview?.gameplayRating),
@@ -220,6 +223,116 @@ function getEligibleCandidates(games: RecommendationGame[], source?: Recommendat
   });
 }
 
+function completionTimestamp(game: RecommendationGame) {
+  return Math.max(
+    0,
+    ...game.userGames
+      .filter((copy) => copy.status === "COMPLETED" && copy.dateCompleted)
+      .map((copy) => new Date(copy.dateCompleted as Date | string).getTime()),
+  );
+}
+
+function getRecentRecommendationSources(games: RecommendationGame[]) {
+  const current = games.filter((game) =>
+    game.userGames.some((copy) => copy.status === "PLAYING" || copy.status === "REPLAYING"),
+  );
+
+  const currentTitles = new Set(current.map((game) => normalizeTitle(game.title)));
+  const recentlyCompleted = games
+    .filter((game) => completionTimestamp(game) > 0 && !currentTitles.has(normalizeTitle(game.title)))
+    .sort((a, b) => completionTimestamp(b) - completionTimestamp(a))
+    .slice(0, 3);
+
+  return [
+    ...current.map((game) => ({ game, kind: "PLAYING" as const })),
+    ...recentlyCompleted.map((game) => ({ game, kind: "RECENTLY_COMPLETED" as const })),
+  ];
+}
+
+function addChangeOfPaceReasons(
+  result: RecommendationResult,
+  recentGenreCounts: Map<string, { label: string; count: number }>,
+) {
+  const candidateGenres = genreNames(result.game);
+  const repeated = [...recentGenreCounts.values()]
+    .filter((entry) => entry.count >= 2)
+    .sort((a, b) => b.count - a.count);
+  const avoided = repeated.find((entry) =>
+    !candidateGenres.some((genre) => normalize(genre) === normalize(entry.label)),
+  );
+
+  const reasons = [...result.reasons];
+  if (avoided) reasons.unshift(`A change from recent ${avoided.label} games`);
+  else if (![...recentGenreCounts.keys()].some((genre) => candidateGenres.some((item) => normalize(item) === genre))) {
+    reasons.unshift("A different genre from your recent games");
+  }
+
+  return { ...result, reasons: [...new Set(reasons)].slice(0, 5) };
+}
+
+export function buildRecommendedNext(games: RecommendationGame[]): RecommendedNextData {
+  const recent = getRecentRecommendationSources(games);
+  const sources = recent.map((entry) => entry.game);
+  const candidates = getEligibleCandidates(games);
+
+  if (!sources.length || !candidates.length) {
+    return {
+      recentSources: recent.map(({ game, kind }) => ({ id: game.id, title: game.title, kind })),
+      recentGenres: [],
+      rankedPool: [],
+      surprisePool: [],
+    };
+  }
+
+  const recentGenreCounts = new Map<string, { label: string; count: number }>();
+  for (const source of sources) {
+    for (const genre of genreNames(source)) {
+      const key = normalize(genre);
+      const existing = recentGenreCounts.get(key);
+      recentGenreCounts.set(key, { label: existing?.label ?? genre, count: (existing?.count ?? 0) + 1 });
+    }
+  }
+
+  const scored = candidates.map((candidate) => {
+    const pairResults = sources
+      .map((source) => scorePair(source, candidate))
+      .sort((a, b) => b.match - a.match);
+    const best = pairResults[0];
+    const second = pairResults[1];
+    const baseMatch = second ? best.match * 0.72 + second.match * 0.28 : best.match;
+
+    let fatiguePenalty = 0;
+    for (const candidateGenre of genreNames(candidate)) {
+      const recentCount = recentGenreCounts.get(normalize(candidateGenre))?.count ?? 0;
+      if (recentCount > 0) fatiguePenalty += 8 + Math.max(0, recentCount - 1) * 6;
+    }
+    fatiguePenalty = Math.min(32, fatiguePenalty);
+
+    const hasFreshGenre = genreNames(candidate).some((genre) => !recentGenreCounts.has(normalize(genre)));
+    const changeOfPaceBoost = hasFreshGenre ? 7 : 0;
+    const adjustedMatch = clamp(baseMatch - fatiguePenalty + changeOfPaceBoost);
+
+    return addChangeOfPaceReasons(
+      { ...best, match: adjustedMatch, type: "IF_YOU_LIKED" },
+      recentGenreCounts,
+    );
+  });
+
+  const ranked = scored
+    .filter((result) => result.match >= 25)
+    .sort((a, b) => b.match - a.match);
+
+  return {
+    recentSources: recent.map(({ game, kind }) => ({ id: game.id, title: game.title, kind })),
+    recentGenres: [...recentGenreCounts.values()]
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+      .slice(0, 6)
+      .map((entry) => entry.label),
+    rankedPool: ranked.slice(0, 24),
+    surprisePool: ranked.slice(0, 50),
+  };
+}
+
 export function buildPersonalRecommendations(games: RecommendationGame[], limitPerType = 6) {
   const sources = shuffled(games.filter(isLiked))
     .sort((a, b) => (latestReview(b)?.overallRating ?? 0) - (latestReview(a)?.overallRating ?? 0))
@@ -260,263 +373,4 @@ export function buildRecommendationsForGame(
     .filter((result) => result.match >= 35)
     .sort((a, b) => b.match - a.match)
     .slice(0, limit);
-}
-
-
-export type RecommendedNextItem = {
-  game: {
-    id: number;
-    title: string;
-    coverArtUrl: string | null;
-    hltbMain: number | null;
-    genres: string[];
-  };
-  match: number;
-  sourceTitles: string[];
-  reasons: string[];
-  differenceReasons: string[];
-};
-
-export type RecommendedNextCollection = {
-  primary: RecommendedNextItem[];
-  surprise: RecommendedNextItem[];
-  context: {
-    currentlyPlaying: string[];
-    recentlyCompleted: string[];
-    fatiguedGenres: string[];
-  };
-};
-
-function toTimestamp(value: Date | string | null | undefined) {
-  if (!value) return 0;
-  const date = value instanceof Date ? value : new Date(value);
-  const timestamp = date.getTime();
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
-function latestCompletedTimestamp(game: RecommendationGame) {
-  return Math.max(
-    0,
-    ...game.userGames
-      .filter((copy) => copy.status === "COMPLETED")
-      .map((copy) =>
-        Math.max(
-          toTimestamp(copy.dateCompleted),
-          toTimestamp(copy.updatedAt),
-          toTimestamp(copy.createdAt),
-        ),
-      ),
-  );
-}
-
-function recentRecommendationSources(games: RecommendationGame[]) {
-  const currentlyPlaying = games
-    .filter((game) =>
-      game.userGames.some((copy) => copy.status === "PLAYING" || copy.status === "REPLAYING"),
-    )
-    .sort((a, b) => normalizeTitle(a.title).localeCompare(normalizeTitle(b.title)));
-
-  const recentlyCompleted = games
-    .filter((game) => game.userGames.some((copy) => copy.status === "COMPLETED"))
-    .sort((a, b) => latestCompletedTimestamp(b) - latestCompletedTimestamp(a))
-    .slice(0, 3);
-
-  const seen = new Set<number>();
-  const sources = [...currentlyPlaying, ...recentlyCompleted].filter((game) => {
-    if (seen.has(game.id)) return false;
-    seen.add(game.id);
-    return true;
-  });
-
-  return { currentlyPlaying, recentlyCompleted, sources };
-}
-
-function recentGenreCounts(sources: RecommendationGame[]) {
-  const counts = new Map<string, { label: string; count: number }>();
-  for (const source of sources) {
-    const unique = new Map(
-      genreNames(source).map((name) => [normalize(name), name] as const),
-    );
-    for (const [key, label] of unique) {
-      const current = counts.get(key);
-      counts.set(key, { label, count: (current?.count ?? 0) + 1 });
-    }
-  }
-  return counts;
-}
-
-function genreFatiguePenalty(candidate: RecommendationGame, counts: Map<string, { label: string; count: number }>) {
-  let penalty = 0;
-  for (const genre of genreNames(candidate)) {
-    const recent = counts.get(normalize(genre));
-    if (!recent) continue;
-    // Even one recent appearance creates a meaningful soft penalty. Repeated appearances strengthen it.
-    penalty += 16 + Math.max(0, recent.count - 1) * 8;
-  }
-  return Math.min(48, penalty);
-}
-
-function sharedGenreCount(a: RecommendedNextItem, b: RecommendedNextItem) {
-  const left = new Set(a.game.genres.map(normalize));
-  return b.game.genres.filter((genre) => left.has(normalize(genre))).length;
-}
-
-function diversifyRecommendedNext(items: RecommendedNextItem[]) {
-  const remaining = [...items];
-  const ordered: RecommendedNextItem[] = [];
-
-  while (remaining.length) {
-    const batch: RecommendedNextItem[] = [];
-    while (batch.length < 3 && remaining.length) {
-      let bestIndex = 0;
-      let bestScore = Number.NEGATIVE_INFINITY;
-
-      remaining.forEach((item, index) => {
-        const overlapPenalty = batch.reduce(
-          (total, selected) => total + sharedGenreCount(item, selected) * 24,
-          0,
-        );
-        const score = item.match - overlapPenalty;
-        if (score > bestScore) {
-          bestScore = score;
-          bestIndex = index;
-        }
-      });
-
-      batch.push(remaining.splice(bestIndex, 1)[0]);
-    }
-    ordered.push(...batch);
-  }
-
-  return ordered;
-}
-
-export function buildRecommendedNext(
-  games: RecommendationGame[],
-  poolLimit = 18,
-): RecommendedNextCollection {
-  const { currentlyPlaying, recentlyCompleted, sources } = recentRecommendationSources(games);
-  const candidates = getEligibleCandidates(games);
-  const genreCounts = recentGenreCounts(sources);
-  const fatiguedGenres = [...genreCounts.values()]
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-    .map((entry) => entry.label);
-
-  if (!sources.length || !candidates.length) {
-    return {
-      primary: [],
-      surprise: [],
-      context: {
-        currentlyPlaying: currentlyPlaying.map((game) => game.title),
-        recentlyCompleted: recentlyCompleted.map((game) => game.title),
-        fatiguedGenres,
-      },
-    };
-  }
-
-  const scored = candidates
-    .map((candidate) => {
-      const pairResults = sources
-        .filter((source) => source.id !== candidate.id)
-        .map((source) => scorePair(source, candidate))
-        .sort((a, b) => b.match - a.match);
-
-      const best = pairResults[0];
-      if (!best) return null;
-
-      const candidateGenres = genreNames(candidate);
-      const fatiguePenalty = genreFatiguePenalty(candidate, genreCounts);
-      const adjustedMatch = clamp(best.match - fatiguePenalty);
-      const sourceTitles = pairResults
-        .filter((result) => result.match >= Math.max(35, best.match - 12))
-        .slice(0, 2)
-        .map((result) => result.sourceGame?.title)
-        .filter((title): title is string => typeof title === "string");
-
-      const repeatedGenres = candidateGenres.filter((genre) => genreCounts.has(normalize(genre)));
-      const avoidedGenres = fatiguedGenres
-        .filter((genre) => !candidateGenres.some((candidateGenre) => normalize(candidateGenre) === normalize(genre)))
-        .slice(0, 2);
-
-      const differenceReasons: string[] = [];
-      if (avoidedGenres.length) {
-        differenceReasons.push(`A change of pace from recent ${avoidedGenres.join(" and ")} games`);
-      }
-      if (repeatedGenres.length) {
-        differenceReasons.push(
-          `Still a strong fit despite the recent ${repeatedGenres.slice(0, 2).join(" / ")} rotation`,
-        );
-      } else {
-        differenceReasons.push("Avoids the main genres in your current rotation");
-      }
-
-      const recentLengths = sources
-        .map((source) => source.hltbMain)
-        .filter((value): value is number => typeof value === "number" && value > 0);
-      const averageRecentLength = recentLengths.length
-        ? recentLengths.reduce((sum, value) => sum + value, 0) / recentLengths.length
-        : null;
-
-      if (
-        averageRecentLength != null &&
-        candidate.hltbMain != null &&
-        candidate.hltbMain <= averageRecentLength * 0.65
-      ) {
-        differenceReasons.push("A shorter reset after your recent games");
-      }
-
-      const reasons = [...new Set(best.reasons)]
-        .filter((reason) => !reason.toLowerCase().startsWith("same "))
-        .slice(0, 3);
-
-      return {
-        item: {
-          game: {
-            id: candidate.id,
-            title: candidate.title,
-            coverArtUrl: candidate.coverArtUrl,
-            hltbMain: candidate.hltbMain,
-            genres: candidateGenres,
-          },
-          match: adjustedMatch,
-          sourceTitles,
-          reasons,
-          differenceReasons: differenceReasons.slice(0, 2),
-        } satisfies RecommendedNextItem,
-        baseMatch: best.match,
-        fatiguePenalty,
-      };
-    })
-    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-    .filter((entry) => entry.baseMatch >= 35)
-    .sort(
-      (a, b) =>
-        b.item.match - a.item.match ||
-        a.fatiguePenalty - b.fatiguePenalty ||
-        a.item.game.title.localeCompare(b.item.game.title),
-    );
-
-  const primary = diversifyRecommendedNext(scored.map((entry) => entry.item)).slice(0, poolLimit);
-
-  // Surprise keeps quality safeguards but draws from a wider, less obvious pool.
-  const surprise = scored
-    .filter((entry) => entry.baseMatch >= 42)
-    .sort(
-      (a, b) =>
-        a.item.match - b.item.match ||
-        a.fatiguePenalty - b.fatiguePenalty ||
-        a.item.game.title.localeCompare(b.item.game.title),
-    )
-    .map((entry) => entry.item)
-    .slice(0, Math.max(poolLimit, 24));
-
-  return {
-    primary,
-    surprise,
-    context: {
-      currentlyPlaying: currentlyPlaying.map((game) => game.title),
-      recentlyCompleted: recentlyCompleted.map((game) => game.title),
-      fatiguedGenres,
-    },
-  };
 }

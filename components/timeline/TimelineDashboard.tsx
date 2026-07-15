@@ -68,6 +68,9 @@ export function TimelineDashboard({ entries, genres, franchises, platforms }: Pr
 
   const [year, setYear] = useState(availableYears[0] ?? new Date().getFullYear());
   const [month, setMonth] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<"SINGLE" | "RANGE" | "YEAR">("SINGLE");
+  const [rangeStart, setRangeStart] = useState(0);
+  const [rangeEnd, setRangeEnd] = useState(11);
   const [platform, setPlatform] = useState("ALL");
   const [genre, setGenre] = useState("ALL");
   const [franchise, setFranchise] = useState("ALL");
@@ -94,7 +97,14 @@ export function TimelineDashboard({ entries, genres, franchises, platforms }: Pr
   const maxMonthCount = Math.max(1, ...monthGroups.map((item) => item.games.length));
   const selectedMonth = month ?? monthGroups.find((item) => item.games.length > 0)?.index ?? 0;
   const selected = monthGroups[selectedMonth];
+  const visibleMonths = viewMode === "YEAR"
+    ? monthGroups
+    : viewMode === "RANGE"
+      ? monthGroups.slice(Math.min(rangeStart, rangeEnd), Math.max(rangeStart, rangeEnd) + 1)
+      : [selected];
+  const visibleEntries = visibleMonths.flatMap((item) => item.games);
   const totalHours = filtered.reduce((sum, entry) => sum + (entry.hoursPlayed ?? 0), 0);
+  const visibleHours = visibleEntries.reduce((sum, entry) => sum + (entry.hoursPlayed ?? 0), 0);
 
   function clearFilters() {
     setPlatform("ALL");
@@ -102,6 +112,9 @@ export function TimelineDashboard({ entries, genres, franchises, platforms }: Pr
     setFranchise("ALL");
     setStatus("COMPLETED");
     setMonth(null);
+    setViewMode("SINGLE");
+    setRangeStart(0);
+    setRangeEnd(11);
   }
 
   return (
@@ -129,6 +142,30 @@ export function TimelineDashboard({ entries, genres, franchises, platforms }: Pr
               </select>
             </label>
           </div>
+          <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-zinc-800 pt-5">
+            <div>
+              <p className="text-sm font-medium text-zinc-300">Display range</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(["SINGLE", "RANGE", "YEAR"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setViewMode(mode)}
+                    className={`rounded-lg border px-3 py-2 text-sm transition ${viewMode === mode ? "border-white bg-white text-black" : "border-zinc-700 bg-zinc-950 text-zinc-300 hover:border-zinc-500"}`}
+                  >
+                    {mode === "SINGLE" ? "Single Month" : mode === "RANGE" ? "Multiple Months" : "Full Year"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {viewMode === "RANGE" && (
+              <div className="grid grid-cols-2 gap-3">
+                <FilterSelect label="From" value={String(rangeStart)} onChange={(value) => setRangeStart(Number(value))} options={monthNames.map((_, index) => String(index))} optionLabels={monthNames} />
+                <FilterSelect label="To" value={String(rangeEnd)} onChange={(value) => setRangeEnd(Number(value))} options={monthNames.map((_, index) => String(index))} optionLabels={monthNames} />
+              </div>
+            )}
+          </div>
           <button onClick={clearFilters} className="mt-4 text-sm text-zinc-400 hover:text-white">Clear filters</button>
         </section>
 
@@ -151,7 +188,7 @@ export function TimelineDashboard({ entries, genres, franchises, platforms }: Pr
               return (
                 <button
                   key={item.name}
-                  onClick={() => setMonth(item.index)}
+                  onClick={() => { setMonth(item.index); setViewMode("SINGLE"); }}
                   className={`group rounded-xl border p-3 text-left transition ${active ? "border-white bg-zinc-800" : "border-zinc-800 bg-zinc-950 hover:border-zinc-600"}`}
                 >
                   <span className="block text-xs text-zinc-500">{item.name.slice(0, 3)}</span>
@@ -171,35 +208,61 @@ export function TimelineDashboard({ entries, genres, franchises, platforms }: Pr
         <section className="mt-8">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="text-3xl font-bold">{selected.name}</h2>
-              <p className="mt-1 text-zinc-400">{selected.games.length} {selected.games.length === 1 ? "game" : "games"}</p>
+              <h2 className="text-3xl font-bold">
+                {viewMode === "YEAR"
+                  ? `${year} — Full Year`
+                  : viewMode === "RANGE"
+                    ? `${visibleMonths[0]?.name ?? ""} – ${visibleMonths[visibleMonths.length - 1]?.name ?? ""}`
+                    : selected.name}
+              </h2>
+              <p className="mt-1 text-zinc-400">
+                {visibleEntries.length} {visibleEntries.length === 1 ? "game" : "games"} · {visibleHours.toFixed(visibleHours % 1 === 0 ? 0 : 1)} hours
+              </p>
             </div>
           </div>
 
-          {selected.games.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-zinc-800 py-16 text-center text-zinc-500">No games match this month and filter combination.</div>
+          {visibleEntries.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-zinc-800 py-16 text-center text-zinc-500">No games match this date range and filter combination.</div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {selected.games.map((entry) => (
-                <Link key={entry.id} href={`/game/${entry.game.id}`} className="group flex gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 transition hover:border-zinc-600 hover:bg-zinc-900">
-                  <div className="relative h-28 w-20 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
-                    {entry.game.coverArtUrl ? (
-                      <Image src={entry.game.coverArtUrl} alt="" fill sizes="80px" className="object-cover transition group-hover:scale-105" />
-                    ) : <div className="flex h-full items-center justify-center px-2 text-center text-xs text-zinc-600">No cover</div>}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className="font-semibold leading-snug group-hover:text-zinc-200">{entry.game.title}</h3>
-                      {entry.rating != null && <span className="rounded-md bg-zinc-800 px-2 py-1 text-xs font-bold">{entry.rating}/10</span>}
+            <div className="space-y-10">
+              {visibleMonths.map((monthGroup) => (
+                <section key={monthGroup.index}>
+                  <div className="mb-4 flex items-end justify-between gap-3 border-b border-zinc-800 pb-3">
+                    <div>
+                      <h3 className="text-2xl font-bold">{monthGroup.name}</h3>
+                      <p className="mt-1 text-sm text-zinc-500">{monthGroup.games.length} {monthGroup.games.length === 1 ? "game" : "games"}</p>
                     </div>
-                    <p className="mt-2 text-sm text-zinc-400">{formatDate(activityDate(entry))}</p>
-                    <p className="mt-1 text-xs uppercase tracking-wide text-zinc-500">{statusLabels[entry.status]}</p>
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-400">
-                      {entry.platform && <span className="rounded-full border border-zinc-700 px-2 py-1">{entry.platform}</span>}
-                      {entry.hoursPlayed != null && <span className="rounded-full border border-zinc-700 px-2 py-1">{entry.hoursPlayed}h</span>}
-                    </div>
+                    <button type="button" onClick={() => { setMonth(monthGroup.index); setViewMode("SINGLE"); }} className="text-sm text-zinc-400 hover:text-white">View month only</button>
                   </div>
-                </Link>
+
+                  {monthGroup.games.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-zinc-800 py-8 text-center text-sm text-zinc-600">No matching games</div>
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {monthGroup.games.map((entry) => (
+                        <Link key={entry.id} href={`/game/${entry.game.id}`} className="group flex gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 transition hover:border-zinc-600 hover:bg-zinc-900">
+                          <div className="relative h-28 w-20 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
+                            {entry.game.coverArtUrl ? (
+                              <Image src={entry.game.coverArtUrl} alt="" fill sizes="80px" className="object-cover transition group-hover:scale-105" />
+                            ) : <div className="flex h-full items-center justify-center px-2 text-center text-xs text-zinc-600">No cover</div>}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <h4 className="font-semibold leading-snug group-hover:text-zinc-200">{entry.game.title}</h4>
+                              {entry.rating != null && <span className="rounded-md bg-zinc-800 px-2 py-1 text-xs font-bold">{entry.rating}/10</span>}
+                            </div>
+                            <p className="mt-2 text-sm text-zinc-400">{formatDate(activityDate(entry))}</p>
+                            <p className="mt-1 text-xs uppercase tracking-wide text-zinc-500">{statusLabels[entry.status]}</p>
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-400">
+                              {entry.platform && <span className="rounded-full border border-zinc-700 px-2 py-1">{entry.platform}</span>}
+                              {entry.hoursPlayed != null && <span className="rounded-full border border-zinc-700 px-2 py-1">{entry.hoursPlayed}h</span>}
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </section>
               ))}
             </div>
           )}
@@ -209,13 +272,13 @@ export function TimelineDashboard({ entries, genres, franchises, platforms }: Pr
   );
 }
 
-function FilterSelect({ label, value, options, onChange, allLabel }: { label: string; value: string; options: string[]; onChange: (value: string) => void; allLabel?: string }) {
+function FilterSelect({ label, value, options, onChange, allLabel, optionLabels }: { label: string; value: string; options: string[]; onChange: (value: string) => void; allLabel?: string; optionLabels?: string[] }) {
   return (
     <label className="text-sm text-zinc-400">
       {label}
       <select className="input mt-2 w-full" value={value} onChange={(event) => onChange(event.target.value)}>
         {allLabel && <option value="ALL">{allLabel}</option>}
-        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+        {options.map((option, index) => <option key={option} value={option}>{optionLabels?.[index] ?? option}</option>)}
       </select>
     </label>
   );

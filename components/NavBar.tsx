@@ -12,6 +12,7 @@ export function NavBar() {
           <NavLink href="/">Library</NavLink>
           <NavLink href="/recommendation">Recommendations</NavLink>
           <NavLink href="/stats">Stats</NavLink>
+          <NavLink href="/years">Years</NavLink>
           <NavLink href="/timeline">Timeline</NavLink>
           <NavLink href="/goals">Goals</NavLink>
           <NavLink href="/platforms">Platforms</NavLink>

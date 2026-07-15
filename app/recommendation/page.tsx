@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { buildPersonalRecommendations, type RecommendationGame, type RecommendationResult } from "@/lib/recommendations";
+import { buildPersonalRecommendations, buildRecommendedNext, type RecommendationGame, type RecommendationResult } from "@/lib/recommendations";
 import { RecommendationCard } from "@/components/recommendations/RecommendationCard";
+import { RecommendedNext } from "@/components/recommendations/RecommendedNext";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function RecommendationPage() {
       userGames: { include: { reviews: { orderBy: { reviewDate: "desc" } } } },
     }, orderBy: { title: "asc" },
   }) as RecommendationGame[];
+  const recommendedNext = buildRecommendedNext(games);
   const groups = buildPersonalRecommendations(games);
 
   return <main className="min-h-screen bg-zinc-950 p-4 text-white sm:p-8">
@@ -27,7 +29,10 @@ export default async function RecommendationPage() {
       <p className="text-xs font-bold uppercase tracking-[0.24em] text-fuchsia-400">Personalized Discovery</p>
       <h1 className="mt-2 text-4xl font-black">Recommendations</h1>
       <p className="mt-2 max-w-3xl text-zinc-400">Built from games you completed and rated highly. Completed, playing, replaying, and duplicate copies are not recommended.</p>
-      <div className="mt-10 space-y-12">
+      <div className="mt-10">
+        <RecommendedNext collection={recommendedNext} />
+      </div>
+      <div className="mt-12 space-y-12">
         {sections.map((section) => {
           const items = groups[section.key];
           if (!items.length) return null;

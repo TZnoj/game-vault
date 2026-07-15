@@ -46,9 +46,28 @@ const statusLabels: Record<Status, string> = {
   ONHOLD: "On Hold",
 };
 
+function parseCalendarDate(value: string): Date {
+  // Prisma serializes date-only values as midnight UTC. Reading them in the
+  // browser's local timezone can move them to the previous calendar day.
+  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  }
+
+  return new Date(value);
+}
+
 function activityDate(entry: TimelineEntry): Date {
-  if (entry.status === "COMPLETED" && entry.dateCompleted) return new Date(entry.dateCompleted);
-  if (entry.dateStarted) return new Date(entry.dateStarted);
+  if (entry.status === "COMPLETED" && entry.dateCompleted) {
+    return parseCalendarDate(entry.dateCompleted);
+  }
+
+  if (entry.dateStarted) {
+    return parseCalendarDate(entry.dateStarted);
+  }
+
   return new Date(entry.createdAt);
 }
 
@@ -57,12 +76,13 @@ function formatDate(value: Date) {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 
 export function TimelineDashboard({ entries, genres, franchises, platforms }: Props) {
   const availableYears = useMemo(() => {
-    const years = new Set(entries.map((entry) => activityDate(entry).getFullYear()));
+    const years = new Set(entries.map((entry) => activityDate(entry).getUTCFullYear()));
     return [...years].sort((a, b) => b - a);
   }, [entries]);
 
@@ -79,7 +99,7 @@ export function TimelineDashboard({ entries, genres, franchises, platforms }: Pr
   const filtered = useMemo(() => entries.filter((entry) => {
     const date = activityDate(entry);
     return (
-      date.getFullYear() === year &&
+      date.getUTCFullYear() === year &&
       (platform === "ALL" || entry.platform === platform) &&
       (genre === "ALL" || entry.game.genres.includes(genre)) &&
       (franchise === "ALL" || entry.game.franchise === franchise) &&
@@ -89,7 +109,7 @@ export function TimelineDashboard({ entries, genres, franchises, platforms }: Pr
 
   const monthGroups = useMemo(() => monthNames.map((name, index) => {
     const games = filtered
-      .filter((entry) => activityDate(entry).getMonth() === index)
+      .filter((entry) => activityDate(entry).getUTCMonth() === index)
       .sort((a, b) => activityDate(b).getTime() - activityDate(a).getTime());
     return { name, index, games };
   }), [filtered]);

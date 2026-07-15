@@ -63,6 +63,17 @@ type SortOption =
   | "franchise";
 
 type SortDirection = "asc" | "desc";
+type PageSizeOption = 12 | 24 | 48 | 96 | "all";
+
+const PAGE_SIZE_OPTIONS: { value: PageSizeOption; label: string }[] = [
+  { value: 12, label: "12" },
+  { value: 24, label: "24" },
+  { value: 48, label: "48" },
+  { value: 96, label: "96" },
+  { value: "all", label: "All" },
+];
+
+const PAGE_SIZE_STORAGE_KEY = "game-vault-page-size";
 
 export function GameLibrary({
   userGames,
@@ -97,7 +108,8 @@ export function GameLibrary({
   const [sortBy, setSortBy] = useState<SortOption>("dateCompleted");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 48;
+  const [pageSize, setPageSize] = useState<PageSizeOption>(48);
+  const [paginationReady, setPaginationReady] = useState(false);
 
   const allGenres = useMemo(
     () => [...new Set(userGames.flatMap((item) => getGenres(item)))].sort(),
@@ -266,15 +278,66 @@ export function GameLibrary({
   ]);
 
   useEffect(() => {
-    setPage(1);
-  }, [search, selectedStatuses, selectedGenres, selectedPlatforms, selectedFranchises, selectedYears, minimumHours, maximumHours, minimumRating, maximumRating, sortBy, sortDirection]);
+    const params = new URLSearchParams(window.location.search);
+    const storedPageSize = window.localStorage.getItem(PAGE_SIZE_STORAGE_KEY);
+    const requestedPageSize = params.get("pageSize") ?? storedPageSize;
+    if (requestedPageSize === "all") {
+      setPageSize("all");
+    } else {
+      const numericPageSize = Number(requestedPageSize);
+      if ([12, 24, 48, 96].includes(numericPageSize)) {
+        setPageSize(numericPageSize as Exclude<PageSizeOption, "all">);
+      }
+    }
 
-  const totalPages = Math.max(1, Math.ceil(filteredGames.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const paginatedGames = filteredGames.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
+    setPaginationReady(true);
+  }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, selectedStatuses, selectedGenres, selectedPlatforms, selectedFranchises, selectedYears, minimumHours, maximumHours, minimumRating, maximumRating, sortBy, sortDirection, pageSize]);
+
+  const effectivePageSize =
+    pageSize === "all" ? Math.max(1, filteredGames.length) : pageSize;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredGames.length / effectivePageSize),
   );
+  const currentPage = Math.min(page, totalPages);
+  const paginatedGames =
+    pageSize === "all"
+      ? filteredGames
+      : filteredGames.slice(
+          (currentPage - 1) * effectivePageSize,
+          currentPage * effectivePageSize,
+        );
+  const visibleRangeStart = filteredGames.length
+    ? (currentPage - 1) * effectivePageSize + 1
+    : 0;
+  const visibleRangeEnd = Math.min(
+    filteredGames.length,
+    currentPage * effectivePageSize,
+  );
+
+  useEffect(() => {
+    if (!paginationReady) return;
+
+    window.localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(pageSize));
+
+    const params = new URLSearchParams(window.location.search);
+    if (currentPage === 1) params.delete("page");
+    else params.set("page", String(currentPage));
+
+    if (pageSize === 48) params.delete("pageSize");
+    else params.set("pageSize", String(pageSize));
+
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+    );
+  }, [currentPage, pageSize, paginationReady]);
 
   const completedGames = filteredGames.filter(
     (item) => item.status === "COMPLETED" && !item.game.isEndless,
@@ -315,10 +378,13 @@ export function GameLibrary({
 
   return (
     <main className="min-h-screen bg-zinc-950 p-8 text-white">
-      <div className="mb-6">
-        <p className="text-zinc-400">
-          {filteredGames.length} of {userGames.length} games shown
-        </p>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2 text-zinc-400">
+        <p>{filteredGames.length} of {userGames.length} games match</p>
+        {filteredGames.length ? (
+          <p className="text-sm">
+            Showing {visibleRangeStart}–{visibleRangeEnd}
+          </p>
+        ) : null}
       </div>
 
       {showSummaryStats && (
@@ -417,7 +483,7 @@ export function GameLibrary({
           </div>
         )}
 
-        <div className="mt-5 flex flex-col gap-3 border-t border-zinc-800 pt-5 sm:flex-row">
+        <div className="mt-5 flex flex-col gap-3 border-t border-zinc-800 pt-5 sm:flex-row sm:items-center">
           <select
             value={sortBy}
             onChange={(event) => setSortBy(event.target.value as SortOption)}
@@ -440,6 +506,29 @@ export function GameLibrary({
           >
             {sortDirection === "asc" ? "Ascending ↑" : "Descending ↓"}
           </button>
+
+          <label className="flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-300 sm:ml-auto">
+            <span className="whitespace-nowrap">Games per page</span>
+            <select
+              value={pageSize}
+              onChange={(event) => {
+                const value = event.target.value;
+                setPageSize(
+                  value === "all"
+                    ? "all"
+                    : (Number(value) as Exclude<PageSizeOption, "all">),
+                );
+              }}
+              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 font-semibold text-white outline-none focus:border-zinc-400"
+              aria-label="Games per page"
+            >
+              {PAGE_SIZE_OPTIONS.map((option) => (
+                <option key={String(option.value)} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </section>
 
@@ -457,24 +546,59 @@ export function GameLibrary({
         />
       )}
 
-      {filteredGames.length > PAGE_SIZE ? (
-        <nav className="mt-10 flex flex-wrap items-center justify-center gap-3" aria-label="Game library pagination">
+      {pageSize !== "all" && totalPages > 1 ? (
+        <nav
+          className="mt-10 flex flex-wrap items-center justify-center gap-3"
+          aria-label="Game library pagination"
+        >
           <button
             type="button"
             disabled={currentPage === 1}
-            onClick={() => { setPage((value) => Math.max(1, value - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            onClick={() => {
+              setPage(1);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className="rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="First page"
+          >
+            First
+          </button>
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => {
+              setPage((value) => Math.max(1, value - 1));
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
             className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
           >
             Previous
           </button>
-          <span className="text-sm text-zinc-400">Page {currentPage} of {totalPages}</span>
+          <span className="min-w-28 text-center text-sm text-zinc-400">
+            Page {currentPage} of {totalPages}
+          </span>
           <button
             type="button"
             disabled={currentPage === totalPages}
-            onClick={() => { setPage((value) => Math.min(totalPages, value + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            onClick={() => {
+              setPage((value) => Math.min(totalPages, value + 1));
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
             className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
           >
             Next
+          </button>
+          <button
+            type="button"
+            disabled={currentPage === totalPages}
+            onClick={() => {
+              setPage(totalPages);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className="rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Last page"
+          >
+            Last
           </button>
         </nav>
       ) : null}

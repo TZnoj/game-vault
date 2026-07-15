@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { RatingBadge } from "@/components/RatingBadge";
 import { GameRecommendations } from "@/components/recommendations/GameRecommendations";
+import { BackButton } from "@/components/ui/BackButton";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -153,6 +154,7 @@ export default async function GamePage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-zinc-950 p-4 text-white sm:p-8">
+      <div className="mb-5"><BackButton fallbackHref="/" /></div>
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex gap-2">

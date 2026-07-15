@@ -1,16 +1,15 @@
-import Image from "next/image";
 import Link from "next/link";
 import type { RecommendationResult } from "@/lib/recommendations";
+import { GameCover } from "@/components/ui/GameCover";
 
 export function RecommendationCard({ recommendation }: { recommendation: RecommendationResult }) {
   const { game, match, reasons, breakdown, sourceGame } = recommendation;
   return (
     <article className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/70">
       <Link href={`/game/${game.id}`} className="grid h-full grid-cols-[96px_1fr] gap-4 p-4 sm:grid-cols-[120px_1fr]">
-        {game.coverArtUrl ? (
-          <Image src={game.coverArtUrl} alt={`${game.title} cover`} width={120} height={180}
-            className="aspect-[2/3] w-full rounded-lg object-cover" />
-        ) : <div className="aspect-[2/3] rounded-lg bg-zinc-800" />}
+        <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-zinc-800">
+          <GameCover src={game.coverArtUrl} alt={`${game.title} cover`} sizes="120px" />
+        </div>
         <div className="min-w-0">
           <div className="flex items-start justify-between gap-3">
             <div>

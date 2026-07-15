@@ -1,10 +1,11 @@
 "use client";
 
-import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { RatingBadge } from "@/components/RatingBadge";
 import { StatusBadge } from "@/components/StatusBadge";
+import { GameCover } from "@/components/ui/GameCover";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 type GameStatus =
   | "BACKLOG"
@@ -95,6 +96,8 @@ export function GameLibrary({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("dateCompleted");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 48;
 
   const allGenres = useMemo(
     () => [...new Set(userGames.flatMap((item) => getGenres(item)))].sort(),
@@ -261,6 +264,17 @@ export function GameLibrary({
     sortBy,
     sortDirection,
   ]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, selectedStatuses, selectedGenres, selectedPlatforms, selectedFranchises, selectedYears, minimumHours, maximumHours, minimumRating, maximumRating, sortBy, sortDirection]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredGames.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedGames = filteredGames.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
 
   const completedGames = filteredGames.filter(
     (item) => item.status === "COMPLETED" && !item.game.isEndless,
@@ -431,20 +445,39 @@ export function GameLibrary({
 
       {filteredGames.length ? (
         <div className="grid gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-          {filteredGames.map((item) => (
+          {paginatedGames.map((item) => (
             <GameCard key={item.id} userGame={item} />
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-zinc-700 p-12 text-center text-zinc-400">
-          <p className="text-xl font-semibold text-white">
-            No games match those filters
-          </p>
-          <p className="mt-2">
-            Try removing a filter or searching for a broader term.
-          </p>
-        </div>
+        <EmptyState
+          title="No games match those filters"
+          description="Try removing a filter or searching for a broader title, genre, platform, franchise, note, status, or year."
+          icon="🔎"
+        />
       )}
+
+      {filteredGames.length > PAGE_SIZE ? (
+        <nav className="mt-10 flex flex-wrap items-center justify-center gap-3" aria-label="Game library pagination">
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => { setPage((value) => Math.max(1, value - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span className="text-sm text-zinc-400">Page {currentPage} of {totalPages}</span>
+          <button
+            type="button"
+            disabled={currentPage === totalPages}
+            onClick={() => { setPage((value) => Math.min(totalPages, value + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Next
+          </button>
+        </nav>
+      ) : null}
     </main>
   );
 }
@@ -579,19 +612,11 @@ function GameCard({ userGame }: { userGame: GameLibraryItem }) {
     >
       <Link href={`/game/${userGame.game.id}`}>
         <div className="relative aspect-[3/4] bg-zinc-800">
-          {userGame.game.coverArtUrl ? (
-            <Image
-              src={userGame.game.coverArtUrl}
-              alt={`${userGame.game.title} cover art`}
-              fill
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 16vw"
-              className="object-cover"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-zinc-500">
-              No Cover
-            </div>
-          )}
+          <GameCover
+            src={userGame.game.coverArtUrl}
+            alt={`${userGame.game.title} cover art`}
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 16vw"
+          />
         </div>
       </Link>
 

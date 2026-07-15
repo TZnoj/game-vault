@@ -15,11 +15,39 @@ const sections: { key: RecommendationResult["type"]; title: string; description:
 
 export default async function RecommendationPage() {
   const games = await prisma.game.findMany({
-    include: {
-      franchise: true,
-      gameGenres: { include: { genre: true } },
-      userGames: { include: { reviews: { orderBy: { reviewDate: "desc" } } } },
-    }, orderBy: { title: "asc" },
+    select: {
+      id: true,
+      title: true,
+      coverArtUrl: true,
+      hltbMain: true,
+      franchiseId: true,
+      franchise: { select: { id: true, name: true } },
+      gameGenres: {
+        select: {
+          genreId: true,
+          genre: { select: { id: true, name: true } },
+        },
+      },
+      userGames: {
+        select: {
+          status: true,
+          dateStarted: true,
+          dateCompleted: true,
+          hoursPlayed: true,
+          reviews: {
+            select: {
+              overallRating: true,
+              gameplayRating: true,
+              storyRating: true,
+              artRating: true,
+              musicRating: true,
+            },
+            orderBy: [{ reviewDate: "desc" }, { id: "desc" }],
+          },
+        },
+      },
+    },
+    orderBy: { title: "asc" },
   }) as RecommendationGame[];
   const recommendedNext = buildRecommendedNext(games);
   const groups = buildPersonalRecommendations(games);

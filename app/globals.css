@@ -48,3 +48,13 @@ select.input option {
   background-color: rgb(24 24 27);
   color: white;
 }
+
+/* Phase 13: polished navigation and stable media */
+html { scroll-behavior: smooth; }
+.route-transition { animation: route-enter 180ms ease-out both; }
+@keyframes route-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .route-transition { animation: none; }
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}

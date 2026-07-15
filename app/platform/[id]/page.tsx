@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { RatingBadge } from "@/components/RatingBadge";
+import { BackButton } from "@/components/ui/BackButton";
 
 export const dynamic = "force-dynamic";
 
@@ -265,6 +266,7 @@ export default async function PlatformPage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-zinc-950 px-4 py-8 text-white sm:px-8">
+      <div className="mb-5"><BackButton fallbackHref="/platforms" /></div>
       <div className="mx-auto max-w-[1600px]">
         <Link href="/platforms" className="text-sm text-zinc-400 hover:text-white">
           ← Back to Platforms

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { NavBar } from "@/components/NavBar";
 import { SaveToast } from "@/components/SaveToast";
+import { RouteTransition } from "@/components/RouteTransition";
 
 
 
@@ -41,7 +42,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <NavBar />
-        {children}
+        <RouteTransition>{children}</RouteTransition>
         <SaveToast />
       </body>
     </html>

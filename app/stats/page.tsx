@@ -123,15 +123,43 @@ export default async function StatsPage() {
     .map((review) => review.artRating)
     .filter((value): value is number => value != null);
 
-  const ratedGames = userGames
-    .filter((entry) => entry.reviews[0]?.overallRating != null)
-    .sort(
-      (a, b) =>
-        (b.reviews[0]?.overallRating ?? 0) -
-        (a.reviews[0]?.overallRating ?? 0),
+  const ratedGames = userGames.filter(
+    (entry) => entry.reviews[0]?.overallRating != null,
+  );
+
+  function randomEntry(entries: DashboardGame[]) {
+    if (entries.length === 0) return null;
+    return entries[Math.floor(Math.random() * entries.length)] ?? null;
+  }
+
+  const tenOutOfTenGames = ratedGames.filter(
+    (entry) => entry.reviews[0]?.overallRating === 10,
+  );
+  const oneOutOfTenGames = ratedGames.filter(
+    (entry) => entry.reviews[0]?.overallRating === 1,
+  );
+
+  const highestRating = Math.max(
+    ...ratedGames.map((entry) => entry.reviews[0]?.overallRating ?? 0),
+  );
+  const lowestRating = Math.min(
+    ...ratedGames.map((entry) => entry.reviews[0]?.overallRating ?? 10),
+  );
+
+  const highestRated =
+    randomEntry(tenOutOfTenGames) ??
+    randomEntry(
+      ratedGames.filter(
+        (entry) => entry.reviews[0]?.overallRating === highestRating,
+      ),
     );
-  const highestRated = ratedGames[0] ?? null;
-  const lowestRated = ratedGames.at(-1) ?? null;
+  const lowestRated =
+    randomEntry(oneOutOfTenGames) ??
+    randomEntry(
+      ratedGames.filter(
+        (entry) => entry.reviews[0]?.overallRating === lowestRating,
+      ),
+    );
 
   const ratingDistribution = Array.from({ length: 10 }, (_, index) => {
     const rating = 10 - index;
@@ -389,11 +417,11 @@ export default async function StatsPage() {
           <StatCard
             label="Top Franchise"
             value={topFranchise?.[0] ?? "N/A"}
-            detail={topFranchise ? `${topFranchise[1].games} games played` : undefined}
+            detail={topFranchise ? `${topFranchise[1].games} games owned` : undefined}
           />
         </div>
         <StatsTable
-          headers={["Franchise", "Games Played", "Completed", "Completion", "Average Rating", "Hours"]}
+          headers={["Franchise", "Games Owned", "Completed", "Completion", "Average Rating", "Hours"]}
           rows={franchises.map(([name, stats]) => [
             <Link key={name} href={`/franchise/${stats.id}`} className="font-semibold hover:underline">{name}</Link>,
             stats.games,

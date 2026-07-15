@@ -34,7 +34,6 @@ function parseNullableDate(value: FormDataEntryValue | null) {
   return new Date(text);
 }
 
-
 type IgdbCoverChoice = {
   name: string;
   imageId: string;
@@ -142,131 +141,130 @@ async function updateGame(formData: FormData) {
 
   await requireAdmin();
 
-  const franchiseIdRaw = String(formData.get("franchiseId") ?? "NONE");
-  const newFranchiseName = String(
-    formData.get("newFranchiseName") ?? "",
-  ).trim();
-
   const gameId = Number(formData.get("gameId"));
-  const igdbName = String(formData.get("igdbName") ?? "").trim();
-  const rawgName = String(formData.get("rawgName") ?? "").trim();
-  const hltbName = String(formData.get("hltbName") ?? "").trim();
-  const manualReleaseDate = parseNullableDate(formData.get("manualReleaseDate"));
-const lockReleaseDate = formData.get("lockReleaseDate") === "on";
-const manualMetacritic = parseNullableNumber(formData.get("manualMetacritic"));
-const lockCoverArt = formData.get("lockCoverArt") === "on";
-const lockMetacritic = formData.get("lockMetacritic") === "on";
-const lockHLTB = formData.get("lockHLTB") === "on";
-  const overrideCoverArtUrl = String(
-    formData.get("overrideCoverArtUrl") ?? "",
-  ).trim();
-  const isEndless = formData.get("isEndless") === "on";
-  await prisma.metadataOverride.upsert({
-    where: {
-      gameId,
-    },
-    update: {
-      igdbName: igdbName || null,
-      rawgName: rawgName || null,
-      hltbName: hltbName || null,
-      coverArtUrl: overrideCoverArtUrl || null,
-      manualReleaseDate,
-      lockReleaseDate,
-      manualMetacritic,
-lockCoverArt,
-lockMetacritic,
-lockHLTB,
-    },
-    create: {
-      gameId,
-      igdbName: igdbName || null,
-      rawgName: rawgName || null,
-      hltbName: hltbName || null,
-      coverArtUrl: overrideCoverArtUrl || null,
-      manualReleaseDate,
-      lockReleaseDate,
-      manualMetacritic,
-lockCoverArt,
-lockMetacritic,
-lockHLTB,
-    },
-  });
 
   if (!Number.isInteger(gameId)) {
     throw new Error("Invalid game ID");
   }
 
   const title = String(formData.get("title") ?? "").trim();
+
+  if (!title) {
+    throw new Error("Title is required");
+  }
+
+  const franchiseIdRaw = String(formData.get("franchiseId") ?? "NONE");
+  const newFranchiseName = String(
+    formData.get("newFranchiseName") ?? "",
+  ).trim();
+  const igdbName = String(formData.get("igdbName") ?? "").trim();
+  const rawgName = String(formData.get("rawgName") ?? "").trim();
+  const hltbName = String(formData.get("hltbName") ?? "").trim();
+  const manualReleaseDate = parseNullableDate(
+    formData.get("manualReleaseDate"),
+  );
+  const lockReleaseDate = formData.get("lockReleaseDate") === "on";
+  const manualMetacritic = parseNullableNumber(
+    formData.get("manualMetacritic"),
+  );
+  const lockCoverArt = formData.get("lockCoverArt") === "on";
+  const lockMetacritic = formData.get("lockMetacritic") === "on";
+  const lockHLTB = formData.get("lockHLTB") === "on";
+  const overrideCoverArtUrl = String(
+    formData.get("overrideCoverArtUrl") ?? "",
+  ).trim();
+  const isEndless = formData.get("isEndless") === "on";
   const manualCoverArtUrl = String(formData.get("coverArtUrl") ?? "").trim();
   const selectedCoverArtUrl = String(
     formData.get("selectedCoverArtUrl") ?? "",
   ).trim();
-
   const coverArtUrl = selectedCoverArtUrl || manualCoverArtUrl;
+  const genreIds = [
+    ...new Set(
+      formData
+        .getAll("genreIds")
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value)),
+    ),
+  ];
 
-  const genreIds = formData
-    .getAll("genreIds")
-    .map((value) => Number(value))
-    .filter((value) => Number.isInteger(value));
+  await prisma.$transaction(async (tx) => {
+    let franchiseId: number | null = null;
 
-  let franchiseId: number | null = null;
+    if (newFranchiseName) {
+      const franchise = await tx.franchise.upsert({
+        where: { name: newFranchiseName },
+        update: {},
+        create: { name: newFranchiseName },
+      });
 
-  if (newFranchiseName) {
-    const franchise = await prisma.franchise.upsert({
-      where: {
-        name: newFranchiseName,
+      franchiseId = franchise.id;
+    } else if (franchiseIdRaw !== "NONE" && franchiseIdRaw !== "") {
+      const parsedFranchiseId = Number(franchiseIdRaw);
+
+      if (!Number.isInteger(parsedFranchiseId)) {
+        throw new Error("Invalid franchise ID");
+      }
+
+      franchiseId = parsedFranchiseId;
+    }
+
+    await tx.metadataOverride.upsert({
+      where: { gameId },
+      update: {
+        igdbName: igdbName || null,
+        rawgName: rawgName || null,
+        hltbName: hltbName || null,
+        coverArtUrl: overrideCoverArtUrl || null,
+        manualReleaseDate,
+        lockReleaseDate,
+        manualMetacritic,
+        lockCoverArt,
+        lockMetacritic,
+        lockHLTB,
       },
-      update: {},
       create: {
-        name: newFranchiseName,
+        gameId,
+        igdbName: igdbName || null,
+        rawgName: rawgName || null,
+        hltbName: hltbName || null,
+        coverArtUrl: overrideCoverArtUrl || null,
+        manualReleaseDate,
+        lockReleaseDate,
+        manualMetacritic,
+        lockCoverArt,
+        lockMetacritic,
+        lockHLTB,
       },
     });
 
-    franchiseId = franchise.id;
-  } else if (franchiseIdRaw !== "NONE" && franchiseIdRaw !== "") {
-    franchiseId = Number(franchiseIdRaw);
-  }
-
-  const game = await prisma.game.update({
-    where: {
-      id: gameId,
-    },
-    data: {
-      title,
-      franchiseId,
-      isEndless,
-      coverArtUrl: coverArtUrl || null,
-      metacriticScore: parseNullableNumber(formData.get("metacriticScore")),
-      hltbMain: parseNullableNumber(formData.get("hltbMain")),
-      hltbMainExtra: parseNullableNumber(formData.get("hltbMainExtra")),
-      hltbCompletionist: parseNullableNumber(formData.get("hltbCompletionist")),
-    },
-    include: {
-      userGames: {
-        include: {
-          reviews: true,
-        },
+    await tx.game.update({
+      where: { id: gameId },
+      data: {
+        title,
+        franchiseId,
+        isEndless,
+        coverArtUrl: coverArtUrl || null,
+        metacriticScore: parseNullableNumber(formData.get("metacriticScore")),
+        hltbMain: parseNullableNumber(formData.get("hltbMain")),
+        hltbMainExtra: parseNullableNumber(formData.get("hltbMainExtra")),
+        hltbCompletionist: parseNullableNumber(
+          formData.get("hltbCompletionist"),
+        ),
       },
-    },
+    });
+
+    await tx.gameGenre.deleteMany({ where: { gameId } });
+
+    if (genreIds.length > 0) {
+      await tx.gameGenre.createMany({
+        data: genreIds.map((genreId) => ({ gameId, genreId })),
+        skipDuplicates: true,
+      });
+    }
   });
 
-  await prisma.gameGenre.deleteMany({
-  where: {
-    gameId,
-  },
-});
-
-for (const genreId of genreIds) {
-  await prisma.gameGenre.create({
-    data: {
-      gameId,
-      genreId,
-    },
-  });
-}
   revalidateGameData();
-
-
   redirect(`/game/${gameId}`);
 }
 
@@ -296,76 +294,63 @@ async function addCopy(formData: FormData) {
 async function deleteGame(formData: FormData) {
   "use server";
 
+  await requireAdmin();
+
   const gameId = Number(formData.get("gameId"));
 
   if (!Number.isInteger(gameId)) {
     throw new Error("Invalid game ID");
   }
 
-  const game = await prisma.game.findUnique({
-    where: {
-      id: gameId,
-    },
-    include: {
-      userGames: {
-        include: {
-          reviews: true,
-        },
-      },
-    },
+  const deleted = await prisma.$transaction(async (tx) => {
+    const game = await tx.game.findUnique({
+      where: { id: gameId },
+      select: { id: true },
+    });
+
+    if (!game) return false;
+
+    const userGames = await tx.userGame.findMany({
+      where: { gameId },
+      select: { id: true },
+    });
+    const userGameIds = userGames.map((userGame) => userGame.id);
+
+    if (userGameIds.length > 0) {
+      await tx.review.deleteMany({
+        where: { userGameId: { in: userGameIds } },
+      });
+    }
+
+    await tx.userGame.deleteMany({ where: { gameId } });
+    await tx.gamePlatform.deleteMany({ where: { gameId } });
+    await tx.gameGenre.deleteMany({ where: { gameId } });
+    await tx.gameImage.deleteMany({ where: { gameId } });
+    await tx.metadataOverride.deleteMany({ where: { gameId } });
+    await tx.genreOverride.deleteMany({ where: { gameId } });
+
+    // Preserve enrichment history while removing the foreign-key reference.
+    await tx.enrichmentLog.updateMany({
+      where: { gameId },
+      data: { gameId: null },
+    });
+
+    await tx.game.delete({ where: { id: gameId } });
+    return true;
   });
 
-  if (!game) {
+  if (!deleted) {
     redirect("/admin");
   }
 
-  const userGameIds = game.userGames.map(
-  (userGame: { id: number }) => userGame.id,
-);
-
-  await prisma.review.deleteMany({
-    where: {
-      userGameId: {
-        in: userGameIds,
-      },
-    },
-  });
-
-  await prisma.userGame.deleteMany({
-    where: {
-      gameId,
-    },
-  });
-
-  await prisma.gameGenre.deleteMany({
-    where: {
-      gameId,
-    },
-  });
-
-  await prisma.metadataOverride.deleteMany({
-    where: {
-      gameId,
-    },
-  });
-
-  await prisma.genreOverride.deleteMany({
-    where: {
-      gameId,
-    },
-  });
-
-  await prisma.game.delete({
-    where: {
-      id: gameId,
-    },
-  });
   revalidateGameData();
-
   redirect("/admin");
 }
 
-export default async function EditGamePage({ params, searchParams }: PageProps) {
+export default async function EditGamePage({
+  params,
+  searchParams,
+}: PageProps) {
   const { id } = await params;
   const { error } = await searchParams;
   const gameId = Number(id);
@@ -399,35 +384,35 @@ export default async function EditGamePage({ params, searchParams }: PageProps) 
     notFound();
   }
 
-const platforms: PlatformOption[] = await prisma.platform.findMany({
-  orderBy: {
-    name: "asc",
-  },
-  select: {
-    id: true,
-    name: true,
-  },
-});
+  const platforms: PlatformOption[] = await prisma.platform.findMany({
+    orderBy: {
+      name: "asc",
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
 
-const genres: GenreOption[] = await prisma.genre.findMany({
-  orderBy: {
-    name: "asc",
-  },
-  select: {
-    id: true,
-    name: true,
-  },
-});
+  const genres: GenreOption[] = await prisma.genre.findMany({
+    orderBy: {
+      name: "asc",
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
 
-const franchises: FranchiseOption[] = await prisma.franchise.findMany({
-  orderBy: {
-    name: "asc",
-  },
-  select: {
-    id: true,
-    name: true,
-  },
-});
+  const franchises: FranchiseOption[] = await prisma.franchise.findMany({
+    orderBy: {
+      name: "asc",
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
 
   const [previousGame, nextGame] = await Promise.all([
     prisma.game.findFirst({
@@ -445,8 +430,8 @@ const franchises: FranchiseOption[] = await prisma.franchise.findMany({
   const coverChoices = await getIgdbCoverChoices(game.title);
 
   const selectedGenreIds = new Set(
-  game.gameGenres.map((gameGenre: GameGenreOption) => gameGenre.genreId),
-);
+    game.gameGenres.map((gameGenre: GameGenreOption) => gameGenre.genreId),
+  );
 
   return (
     <main className="min-h-screen bg-zinc-950 p-8 text-white">
@@ -478,10 +463,14 @@ const franchises: FranchiseOption[] = await prisma.franchise.findMany({
               title={previousGame.title}
             >
               <span className="text-xs text-zinc-500">← Previous game</span>
-              <span className="mt-1 block truncate font-semibold">{previousGame.title}</span>
+              <span className="mt-1 block truncate font-semibold">
+                {previousGame.title}
+              </span>
             </Link>
           ) : (
-            <div className="rounded-xl border border-zinc-900 p-4 text-zinc-600">No previous game</div>
+            <div className="rounded-xl border border-zinc-900 p-4 text-zinc-600">
+              No previous game
+            </div>
           )}
           {nextGame ? (
             <Link
@@ -490,17 +479,22 @@ const franchises: FranchiseOption[] = await prisma.franchise.findMany({
               title={nextGame.title}
             >
               <span className="text-xs text-zinc-500">Next game →</span>
-              <span className="mt-1 block truncate font-semibold">{nextGame.title}</span>
+              <span className="mt-1 block truncate font-semibold">
+                {nextGame.title}
+              </span>
             </Link>
           ) : (
-            <div className="rounded-xl border border-zinc-900 p-4 text-right text-zinc-600">No next game</div>
+            <div className="rounded-xl border border-zinc-900 p-4 text-right text-zinc-600">
+              No next game
+            </div>
           )}
         </div>
         {error === "last-copy" && (
-  <div className="mt-6 rounded-xl border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-200">
-    You cannot delete the final copy from this game. Delete the game itself from the Danger Zone instead.
-  </div>
-)}
+          <div className="mt-6 rounded-xl border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-200">
+            You cannot delete the final copy from this game. Delete the game
+            itself from the Danger Zone instead.
+          </div>
+        )}
 
         <AdminEditForm
           action={updateGame}
@@ -547,18 +541,18 @@ const franchises: FranchiseOption[] = await prisma.franchise.findMany({
                 />
               </Field>
               <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
-  <input
-    type="checkbox"
-    name="isEndless"
-    defaultChecked={game.isEndless}
-  />
-  <span>
-    Party / Endless Game
-    <span className="block text-xs text-zinc-500">
-      Exclude from backlog and completion-required stats.
-    </span>
-  </span>
-</label>
+                <input
+                  type="checkbox"
+                  name="isEndless"
+                  defaultChecked={game.isEndless}
+                />
+                <span>
+                  Party / Endless Game
+                  <span className="block text-xs text-zinc-500">
+                    Exclude from backlog and completion-required stats.
+                  </span>
+                </span>
+              </label>
               <Field label="Cover Art URL">
                 <input
                   name="coverArtUrl"
@@ -645,62 +639,63 @@ const franchises: FranchiseOption[] = await prisma.franchise.findMany({
             </div>
           </section>
 
+          <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold">Owned Copies</h2>
+                <p className="mt-1 text-sm text-zinc-400">
+                  All copies of this game in your collection.
+                </p>
+              </div>
 
-                  <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-  <div className="mb-4 flex items-center justify-between gap-4">
-    <div>
-      <h2 className="text-xl font-bold">Owned Copies</h2>
-      <p className="mt-1 text-sm text-zinc-400">
-        All copies of this game in your collection.
-      </p>
-    </div>
+              <button
+                formAction={addCopy}
+                type="submit"
+                className="rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-500 hover:text-white"
+              >
+                + Add Copy
+              </button>
+            </div>
 
-    <button
-  formAction={addCopy}
-  type="submit"
-  className="rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-500 hover:text-white"
->
-  + Add Copy
-</button>
-  </div>
+            <div className="divide-y divide-zinc-800 overflow-hidden rounded-lg border border-zinc-800">
+              {game.userGames.map((copy: UserGameCopy) => (
+                <div
+                  key={copy.id}
+                  className="grid gap-4 px-4 py-3 sm:grid-cols-[1fr_140px_140px_80px]"
+                >
+                  <div>
+                    <p className="font-semibold">
+                      {copy.platform?.name ?? "Unknown Platform"}
+                    </p>
+                    <p className="text-sm text-zinc-500">Copy #{copy.id}</p>
+                  </div>
 
-  <div className="divide-y divide-zinc-800 overflow-hidden rounded-lg border border-zinc-800">
-    {game.userGames.map((copy: UserGameCopy) => (
-      <div
-        key={copy.id}
-        className="grid gap-4 px-4 py-3 sm:grid-cols-[1fr_140px_140px_80px]"
-      >
-        <div>
-          <p className="font-semibold">
-            {copy.platform?.name ?? "Unknown Platform"}
-          </p>
-          <p className="text-sm text-zinc-500">Copy #{copy.id}</p>
-        </div>
+                  <div>
+                    <p className="text-xs text-zinc-500">Status</p>
+                    <p className="text-sm font-semibold">{copy.status}</p>
+                  </div>
 
-        <div>
-          <p className="text-xs text-zinc-500">Status</p>
-          <p className="text-sm font-semibold">{copy.status}</p>
-        </div>
+                  <div>
+                    <p className="text-xs text-zinc-500">Hours</p>
+                    <p className="text-sm font-semibold">
+                      {copy.hoursPlayed != null
+                        ? `${copy.hoursPlayed} hrs`
+                        : "N/A"}
+                    </p>
+                  </div>
 
-        <div>
-          <p className="text-xs text-zinc-500">Hours</p>
-          <p className="text-sm font-semibold">
-            {copy.hoursPlayed != null ? `${copy.hoursPlayed} hrs` : "N/A"}
-          </p>
-        </div>
-
-        <div className="flex items-center justify-end">
-          <Link
-  href={`/admin/copy/${copy.id}`}
-  className="text-sm text-zinc-300 hover:text-white hover:underline"
->
-  Edit
-</Link>
-        </div>
-      </div>
-    ))}
-  </div>
-</section>
+                  <div className="flex items-center justify-end">
+                    <Link
+                      href={`/admin/copy/${copy.id}`}
+                      className="text-sm text-zinc-300 hover:text-white hover:underline"
+                    >
+                      Edit
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
 
           <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
             <h2 className="mb-4 text-xl font-bold">Genres</h2>
@@ -722,7 +717,7 @@ const franchises: FranchiseOption[] = await prisma.franchise.findMany({
               ))}
             </div>
           </section>
-          
+
           <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
             <h2 className="mb-4 text-xl font-bold">Metadata Overrides</h2>
 
@@ -759,89 +754,96 @@ const franchises: FranchiseOption[] = await prisma.franchise.findMany({
                 />
               </Field>
               <Field label="Manual Release Date">
-  <input
-    name="manualReleaseDate"
-    type="date"
-    defaultValue={formatDateInput(game.metadataOverride?.manualReleaseDate)}
-    className="input"
-  />
-</Field>
+                <input
+                  name="manualReleaseDate"
+                  type="date"
+                  defaultValue={formatDateInput(
+                    game.metadataOverride?.manualReleaseDate,
+                  )}
+                  className="input"
+                />
+              </Field>
 
-<Field label="Manual Metacritic">
-  <input
-    name="manualMetacritic"
-    type="number"
-    min="0"
-    max="100"
-    defaultValue={game.metadataOverride?.manualMetacritic ?? ""}
-    className="input"
-  />
-</Field>
+              <Field label="Manual Metacritic">
+                <input
+                  name="manualMetacritic"
+                  type="number"
+                  min="0"
+                  max="100"
+                  defaultValue={game.metadataOverride?.manualMetacritic ?? ""}
+                  className="input"
+                />
+              </Field>
 
-<label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
-  <input
-    type="checkbox"
-    name="lockReleaseDate"
-    defaultChecked={game.metadataOverride?.lockReleaseDate ?? false}
-  />
-  <span>
-    Lock Release Date
-    <span className="block text-xs text-zinc-500">
-      Prevent enrichment scripts from overwriting this date.
-    </span>
-  </span>
-</label>
-<label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
-  <input
-    type="checkbox"
-    name="lockCoverArt"
-    defaultChecked={game.metadataOverride?.lockCoverArt ?? false}
-  />
-  <span>Lock Cover Art</span>
-</label>
+              <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  name="lockReleaseDate"
+                  defaultChecked={
+                    game.metadataOverride?.lockReleaseDate ?? false
+                  }
+                />
+                <span>
+                  Lock Release Date
+                  <span className="block text-xs text-zinc-500">
+                    Prevent enrichment scripts from overwriting this date.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  name="lockCoverArt"
+                  defaultChecked={game.metadataOverride?.lockCoverArt ?? false}
+                />
+                <span>Lock Cover Art</span>
+              </label>
 
-<label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
-  <input
-    type="checkbox"
-    name="lockMetacritic"
-    defaultChecked={game.metadataOverride?.lockMetacritic ?? false}
-  />
-  <span>Lock Metacritic</span>
-</label>
+              <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  name="lockMetacritic"
+                  defaultChecked={
+                    game.metadataOverride?.lockMetacritic ?? false
+                  }
+                />
+                <span>Lock Metacritic</span>
+              </label>
 
-<label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
-  <input
-    type="checkbox"
-    name="lockHLTB"
-    defaultChecked={game.metadataOverride?.lockHLTB ?? false}
-  />
-  <span>Lock HLTB</span>
-</label>
+              <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  name="lockHLTB"
+                  defaultChecked={game.metadataOverride?.lockHLTB ?? false}
+                />
+                <span>Lock HLTB</span>
+              </label>
             </div>
           </section>
           <p className="text-xs text-zinc-500">
-            Ctrl+S saves from anywhere on this page. Escape cancels and returns to the game page.
+            Ctrl+S saves from anywhere on this page. Escape cancels and returns
+            to the game page.
           </p>
         </AdminEditForm>
 
         <section className="mt-10 rounded-xl border border-red-900/60 bg-red-950/20 p-5">
-        
-  <h2 className="text-xl font-bold text-red-300">Danger Zone</h2>
-  <p className="mt-2 text-sm text-red-200/70">
-    This permanently deletes the game, your playthrough, reviews, genres, and metadata overrides.
-  </p>
+          <h2 className="text-xl font-bold text-red-300">Danger Zone</h2>
+          <p className="mt-2 text-sm text-red-200/70">
+            This permanently deletes the game, your playthrough, reviews,
+            genres, and metadata overrides.
+          </p>
 
-  <form action={deleteGame} className="mt-4">
-  <input type="hidden" name="gameId" value={game.id} />
+          <form action={deleteGame} className="mt-4">
+            <input type="hidden" name="gameId" value={game.id} />
 
-  <button
-    type="submit"
-    className="rounded-lg border border-red-700 bg-red-900 px-5 py-3 font-semibold text-red-100 hover:bg-red-800"
-  >
-    Delete Game
-  </button>
-</form>
-</section>
+            <button
+              type="submit"
+              className="rounded-lg border border-red-700 bg-red-900 px-5 py-3 font-semibold text-red-100 hover:bg-red-800"
+            >
+              Delete Game
+            </button>
+          </form>
+        </section>
       </div>
     </main>
   );

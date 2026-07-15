@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { enrichSingleGame } from "@/lib/enrichGame";
 
-const GAMES_PER_RUN = 350;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+// Keep the batch small enough for Vercel's function-duration limits.
+// The oldest incomplete games are selected first, so repeated runs eventually
+// work through the full library.
+const GAMES_PER_RUN = 12;
 
 type BeforeAfterSnapshot = {
   coverArtUrl: string | null;
@@ -13,17 +20,22 @@ type BeforeAfterSnapshot = {
   releaseDate: Date | null;
 };
 
-
-
 export async function GET(request: Request) {
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (!cronSecret) {
+    console.error("CRON_SECRET is not configured in Vercel.");
+    return NextResponse.json(
+      { error: "Cron is not configured" },
+      { status: 500 },
+    );
+  }
+
   const authHeader = request.headers.get("authorization");
 
-if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-  return NextResponse.json(
-    { error: "Unauthorized" },
-    { status: 401 },
-  );
-}
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const run = await prisma.enrichmentRun.create({
     data: {
@@ -32,123 +44,129 @@ if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     },
   });
 
-  const games = await prisma.game.findMany({
-    where: {
-      OR: [
-        { coverArtUrl: null },
-        { metacriticScore: null },
-        { hltbMain: null },
-        { releaseDate: null },
-      ],
-    },
-    orderBy: {
-      updatedAt: "asc",
-    },
-    take: GAMES_PER_RUN,
-    select: {
-      id: true,
-      title: true,
-    },
-  });
-
   let gamesUpdated = 0;
   let gamesFailed = 0;
 
-  const results: {
-    id: number;
-    title: string;
-    status: "checked" | "updated" | "failed";
-    changedFields: string[];
-    error?: string;
-  }[] = [];
+  try {
+    const games = await prisma.game.findMany({
+      where: {
+        OR: [
+          { coverArtUrl: null },
+          { metacriticScore: null },
+          { hltbMain: null },
+          { releaseDate: null },
+        ],
+      },
+      orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+      take: GAMES_PER_RUN,
+      select: {
+        id: true,
+        title: true,
+      },
+    });
 
-  for (const game of games) {
-    try {
-      const before = await getSnapshot(game.id);
+    const results: {
+      id: number;
+      title: string;
+      status: "checked" | "updated" | "failed";
+      changedFields: string[];
+      error?: string;
+    }[] = [];
 
-      await enrichSingleGame(game.id);
+    for (const game of games) {
+      try {
+        const before = await getSnapshot(game.id);
+        await enrichSingleGame(game.id);
+        const after = await getSnapshot(game.id);
 
-      const after = await getSnapshot(game.id);
+        const changedFields = getChangedFields(before, after);
+        const status = changedFields.length > 0 ? "updated" : "checked";
 
-      const changedFields = getChangedFields(before, after);
-      const status = changedFields.length > 0 ? "updated" : "checked";
+        if (status === "updated") gamesUpdated += 1;
 
-      if (status === "updated") {
-        gamesUpdated += 1;
-      }
+        await prisma.enrichmentLog.create({
+          data: {
+            runId: run.id,
+            gameId: game.id,
+            gameTitle: game.title,
+            status,
+            changedFields,
+          },
+        });
 
-      await prisma.enrichmentLog.create({
-        data: {
-          runId: run.id,
-          gameId: game.id,
-          gameTitle: game.title,
+        results.push({
+          id: game.id,
+          title: game.title,
           status,
           changedFields,
-        },
-      });
+        });
+      } catch (error) {
+        gamesFailed += 1;
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
 
-      results.push({
-        id: game.id,
-        title: game.title,
-        status,
-        changedFields,
-      });
-    } catch (error) {
-      gamesFailed += 1;
+        await prisma.enrichmentLog.create({
+          data: {
+            runId: run.id,
+            gameId: game.id,
+            gameTitle: game.title,
+            status: "failed",
+            changedFields: [],
+            error: message,
+          },
+        });
 
-      const message =
-        error instanceof Error ? error.message : "Unknown error";
-
-      await prisma.enrichmentLog.create({
-        data: {
-          runId: run.id,
-          gameId: game.id,
-          gameTitle: game.title,
+        results.push({
+          id: game.id,
+          title: game.title,
           status: "failed",
           changedFields: [],
           error: message,
-        },
-      });
-
-      results.push({
-        id: game.id,
-        title: game.title,
-        status: "failed",
-        changedFields: [],
-        error: message,
-      });
+        });
+      }
     }
 
-    await sleep(1000);
+    await prisma.enrichmentRun.update({
+      where: { id: run.id },
+      data: {
+        finishedAt: new Date(),
+        gamesChecked: games.length,
+        gamesUpdated,
+        gamesFailed,
+      },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      runId: run.id,
+      checked: games.length,
+      updated: gamesUpdated,
+      failed: gamesFailed,
+      results,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+
+    await prisma.enrichmentRun.update({
+      where: { id: run.id },
+      data: {
+        finishedAt: new Date(),
+        gamesUpdated,
+        gamesFailed: gamesFailed + 1,
+      },
+    });
+
+    console.error("Nightly enrichment failed", error);
+    return NextResponse.json(
+      { ok: false, runId: run.id, error: message },
+      { status: 500 },
+    );
   }
-
-  await prisma.enrichmentRun.update({
-    where: {
-      id: run.id,
-    },
-    data: {
-      finishedAt: new Date(),
-      gamesChecked: games.length,
-      gamesUpdated,
-      gamesFailed,
-    },
-  });
-
-  return NextResponse.json({
-    ok: true,
-    runId: run.id,
-    checked: games.length,
-    updated: gamesUpdated,
-    failed: gamesFailed,
-    results,
-  });
 }
 
 async function getSnapshot(gameId: number): Promise<BeforeAfterSnapshot> {
   const game = await prisma.game.findUnique({
-    where: {
-      id: gameId,
-    },
+    where: { id: gameId },
     select: {
       coverArtUrl: true,
       metacriticScore: true,
@@ -159,10 +177,7 @@ async function getSnapshot(gameId: number): Promise<BeforeAfterSnapshot> {
     },
   });
 
-  if (!game) {
-    throw new Error(`Game ${gameId} not found`);
-  }
-
+  if (!game) throw new Error(`Game ${gameId} not found`);
   return game;
 }
 
@@ -172,22 +187,15 @@ function getChangedFields(
 ) {
   const changedFields: string[] = [];
 
-  if (before.coverArtUrl !== after.coverArtUrl) {
+  if (before.coverArtUrl !== after.coverArtUrl)
     changedFields.push("coverArtUrl");
-  }
-
   if (before.metacriticScore !== after.metacriticScore) {
     changedFields.push("metacriticScore");
   }
-
-  if (before.hltbMain !== after.hltbMain) {
-    changedFields.push("hltbMain");
-  }
-
+  if (before.hltbMain !== after.hltbMain) changedFields.push("hltbMain");
   if (before.hltbMainExtra !== after.hltbMainExtra) {
     changedFields.push("hltbMainExtra");
   }
-
   if (before.hltbCompletionist !== after.hltbCompletionist) {
     changedFields.push("hltbCompletionist");
   }
@@ -195,13 +203,7 @@ function getChangedFields(
   const beforeRelease = before.releaseDate?.toISOString() ?? null;
   const afterRelease = after.releaseDate?.toISOString() ?? null;
 
-  if (beforeRelease !== afterRelease) {
-    changedFields.push("releaseDate");
-  }
+  if (beforeRelease !== afterRelease) changedFields.push("releaseDate");
 
   return changedFields;
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

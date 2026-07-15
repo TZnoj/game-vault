@@ -14,7 +14,6 @@ type PageProps = {
   }>;
 };
 
-
 function parseNullableNumber(value: FormDataEntryValue | null) {
   if (!value) return null;
 
@@ -43,42 +42,33 @@ async function updateCopy(formData: FormData) {
   const copyId = Number(formData.get("copyId"));
   const platformIdRaw = String(formData.get("platformId") ?? "NONE");
   const status = String(formData.get("status") ?? "BACKLOG") as
-  | "BACKLOG"
-  | "PLAYING"
-  | "COMPLETED"
-  | "DROPPED"
-  | "REPLAYING"
-  | "ONHOLD";
+    | "BACKLOG"
+    | "PLAYING"
+    | "COMPLETED"
+    | "DROPPED"
+    | "REPLAYING"
+    | "ONHOLD";
 
   if (!Number.isInteger(gameId) || !Number.isInteger(copyId)) {
     throw new Error("Invalid IDs");
   }
 
+  const platformId =
+    platformIdRaw === "NONE" || platformIdRaw === ""
+      ? null
+      : Number(platformIdRaw);
+
+  if (platformId !== null && !Number.isInteger(platformId)) {
+    throw new Error("Invalid platform ID");
+  }
+
   const dateCompleted = parseNullableDate(formData.get("dateCompleted"));
-
-  await prisma.userGame.update({
-    where: {
-      id: copyId,
-    },
-    data: {
-      status,
-      platformId:
-        platformIdRaw === "NONE" || platformIdRaw === ""
-          ? null
-          : Number(platformIdRaw),
-      hoursPlayed: parseNullableNumber(formData.get("hoursPlayed")),
-      dateStarted: parseNullableDate(formData.get("dateStarted")),
-      dateCompleted,
-    },
-  });
-
   const overallRating = parseNullableNumber(formData.get("overallRating"));
   const gameplayRating = parseNullableNumber(formData.get("gameplayRating"));
   const storyRating = parseNullableNumber(formData.get("storyRating"));
   const artRating = parseNullableNumber(formData.get("artRating"));
   const musicRating = parseNullableNumber(formData.get("musicRating"));
   const notes = String(formData.get("notes") ?? "").trim();
-
   const hasReview =
     overallRating != null ||
     gameplayRating != null ||
@@ -87,54 +77,63 @@ async function updateCopy(formData: FormData) {
     musicRating != null ||
     notes !== "";
 
-  const existingReview = await prisma.review.findFirst({
-    where: {
-      userGameId: copyId,
-    },
-    orderBy: {
-      reviewDate: "desc",
-    },
+  await prisma.$transaction(async (tx) => {
+    const copy = await tx.userGame.findUnique({
+      where: { id: copyId },
+      select: { gameId: true },
+    });
+
+    if (!copy || copy.gameId !== gameId) {
+      throw new Error("Game copy not found");
+    }
+
+    await tx.userGame.update({
+      where: { id: copyId },
+      data: {
+        status,
+        platformId,
+        hoursPlayed: parseNullableNumber(formData.get("hoursPlayed")),
+        dateStarted: parseNullableDate(formData.get("dateStarted")),
+        dateCompleted,
+      },
+    });
+
+    const existingReview = await tx.review.findFirst({
+      where: { userGameId: copyId },
+      orderBy: [{ reviewDate: "desc" }, { id: "desc" }],
+    });
+
+    if (existingReview && hasReview) {
+      await tx.review.update({
+        where: { id: existingReview.id },
+        data: {
+          overallRating,
+          gameplayRating,
+          storyRating,
+          artRating,
+          musicRating,
+          notes: notes || null,
+          reviewDate: dateCompleted,
+        },
+      });
+    } else if (!existingReview && hasReview) {
+      await tx.review.create({
+        data: {
+          userGameId: copyId,
+          overallRating,
+          gameplayRating,
+          storyRating,
+          artRating,
+          musicRating,
+          notes: notes || null,
+          reviewDate: dateCompleted,
+        },
+      });
+    } else if (existingReview) {
+      await tx.review.delete({ where: { id: existingReview.id } });
+    }
   });
 
-  if (existingReview && hasReview) {
-    await prisma.review.update({
-      where: {
-        id: existingReview.id,
-      },
-      data: {
-        overallRating,
-        gameplayRating,
-        storyRating,
-        artRating,
-        musicRating,
-        notes: notes || null,
-        reviewDate: dateCompleted,
-      },
-    });
-  }
-
-  if (!existingReview && hasReview) {
-    await prisma.review.create({
-      data: {
-        userGameId: copyId,
-        overallRating,
-        gameplayRating,
-        storyRating,
-        artRating,
-        musicRating,
-        notes: notes || null,
-        reviewDate: dateCompleted,
-      },
-    });
-  }
-
-  if (existingReview && !hasReview) {
-    await prisma.review.delete({
-      where: {
-        id: existingReview.id,
-      },
-    });
-  }
   revalidateGameData();
   redirect(`/admin/game/${gameId}`);
 }
@@ -183,76 +182,77 @@ async function deleteCopy(formData: FormData) {
     throw new Error("Invalid IDs");
   }
 
-const copyCount = await prisma.userGame.count({
-  where: {
-    gameId,
-  },
-});
+  const result = await prisma.$transaction(async (tx) => {
+    const copy = await tx.userGame.findUnique({
+      where: { id: copyId },
+      select: { gameId: true },
+    });
 
-if (copyCount <= 1) {
-  redirect(`/admin/game/${gameId}?error=last-copy`);
-}
+    if (!copy || copy.gameId !== gameId) {
+      throw new Error("Game copy not found");
+    }
 
-await prisma.review.deleteMany({
-  where: {
-    userGameId: copyId,
-  },
-});
+    const copyCount = await tx.userGame.count({ where: { gameId } });
 
-await prisma.userGame.delete({
-  where: {
-    id: copyId,
-  },
-});
+    if (copyCount <= 1) return "last-copy" as const;
 
-revalidateGameData();
-redirect(`/admin/game/${gameId}`);
+    await tx.review.deleteMany({ where: { userGameId: copyId } });
+    await tx.userGame.delete({ where: { id: copyId } });
+    return "deleted" as const;
+  });
+
+  if (result === "last-copy") {
+    redirect(`/admin/game/${gameId}?error=last-copy`);
+  }
+
+  revalidateGameData();
+  redirect(`/admin/game/${gameId}`);
 }
 
 export default async function EditCopyPage({ params }: PageProps) {
-const { copyId } = await params;
+  const { copyId } = await params;
 
-const userGameId = Number(copyId);
+  const userGameId = Number(copyId);
 
   if (!Number.isInteger(userGameId)) {
-  notFound();
-}
+    notFound();
+  }
 
   const userGame = await prisma.userGame.findUnique({
     where: {
       id: userGameId,
     },
-include: {
-  game: true,
-  platform: true,
-  reviews: {
-    orderBy: {
-      reviewDate: "desc",
+    include: {
+      game: true,
+      platform: true,
+      reviews: {
+        orderBy: {
+          reviewDate: "desc",
+        },
+      },
     },
-  },
-},
   });
-console.log("FOUND COPY", {
-  userGameId,
-  found: !!userGame,
-  userGameGameId: userGame?.gameId,
-});
+  console.log("FOUND COPY", {
+    userGameId,
+    found: !!userGame,
+    userGameGameId: userGame?.gameId,
+  });
   if (!userGame) {
-  notFound();
-}
-const gameId = userGame.gameId;
-    const review = userGame.reviews[0];
+    notFound();
+  }
+  const gameId = userGame.gameId;
+  const review = userGame.reviews[0];
 
   const platforms: { id: number; name: string }[] =
-  await prisma.platform.findMany({
-    orderBy: {
-      name: "asc",
-    },
-    select: {
-      id: true,
-      name: true,
-    },
-  });
+    await prisma.platform.findMany({
+      orderBy: {
+        name: "asc",
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
 
   return (
     <main className="min-h-screen bg-zinc-950 p-8 text-white">
@@ -325,7 +325,7 @@ const gameId = userGame.gameId;
             />
           </Field>
 
-                        <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
             <h2 className="mb-4 text-xl font-bold">Review</h2>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -376,14 +376,16 @@ const gameId = userGame.gameId;
           </section>
 
           <p className="text-xs text-zinc-500">
-            Rating fields save when you press Enter. Use Ctrl+S at any time to save the full copy.
+            Rating fields save when you press Enter. Use Ctrl+S at any time to
+            save the full copy.
           </p>
         </AdminEditForm>
 
         <section className="mt-10 rounded-xl border border-red-900/60 bg-red-950/20 p-5">
           <h2 className="text-xl font-bold text-red-300">Danger Zone</h2>
           <p className="mt-2 text-sm text-red-200/70">
-            This deletes only this copy and its review. The main game will stay in your library.
+            This deletes only this copy and its review. The main game will stay
+            in your library.
           </p>
 
           <form action={deleteCopy} className="mt-4">

@@ -5,43 +5,47 @@ import { prisma } from "@/lib/prisma";
 import { RatingBadge } from "@/components/RatingBadge";
 
 type PageProps = {
-  params: Promise<{
-    id: string;
-  }>;
+  params: Promise<{ id: string }>;
 };
 
-type GameGenreWithGenre = {
-  genreId: number;
-  genre: {
-    name: string;
-  };
-};
-
-type GameReview = {
+type ReviewRecord = {
   overallRating: number | null;
+  gameplayRating: number | null;
+  storyRating: number | null;
+  artRating: number | null;
+  musicRating: number | null;
+  notes: string | null;
+  reviewDate: Date | null;
 };
 
-type GameUserGame = {
+type UserGameRecord = {
   id: number;
   gameId: number;
   platformId: number | null;
   status: string;
   hoursPlayed: number | null;
+  dateStarted: Date | null;
   dateCompleted: Date | null;
-  platform: {
-    name: string;
-  } | null;
-  reviews: GameReview[];
+  platform: { id: number; name: string } | null;
+  reviews: ReviewRecord[];
 };
 
-type SimilarGame = {
+type GenreRecord = {
+  genreId: number;
+  genre: { id: number; name: string };
+};
+
+type RankedGame = {
   id: number;
   title: string;
+  gameGenres: GenreRecord[];
+  userGames: UserGameRecord[];
+};
+
+type SimilarGame = RankedGame & {
   coverArtUrl: string | null;
   releaseDate: Date | null;
   franchiseId: number | null;
-  gameGenres: GameGenreWithGenre[];
-  userGames: GameUserGame[];
 };
 
 type SimilarGameResult = SimilarGame & {
@@ -49,536 +53,594 @@ type SimilarGameResult = SimilarGame & {
   similarityReasons: string[];
 };
 
+type SummaryItem = {
+  label: string;
+  detail: string;
+};
+
 export default async function GamePage({ params }: PageProps) {
   const { id } = await params;
   const gameId = Number(id);
 
-  if (!Number.isInteger(gameId)) {
-    notFound();
-  }
+  if (!Number.isInteger(gameId)) notFound();
 
   const game = await prisma.game.findUnique({
     where: { id: gameId },
     include: {
       franchise: true,
-      gameGenres: {
-        include: {
-          genre: true,
-        },
-      },
+      gameGenres: { include: { genre: true } },
       userGames: {
         include: {
           platform: true,
-          reviews: {
-            orderBy: {
-              reviewDate: "desc",
-            },
-          },
+          reviews: { orderBy: { reviewDate: "desc" } },
         },
+        orderBy: { updatedAt: "desc" },
       },
     },
   });
 
-  if (!game) {
-    notFound();
-  }
+  if (!game) notFound();
 
   const typedGame = game as typeof game & {
-    gameGenres: GameGenreWithGenre[];
-    userGames: GameUserGame[];
+    gameGenres: GenreRecord[];
+    userGames: UserGameRecord[];
   };
 
-  const userGame = typedGame.userGames[0];
-  const review = userGame?.reviews[0];
+  const primaryUserGame =
+    typedGame.userGames.find((copy) => copy.reviews.length > 0) ??
+    typedGame.userGames[0];
+  const review = primaryUserGame?.reviews[0];
+  const genres = typedGame.gameGenres.map((entry) => entry.genre.name);
+  const genreIds = typedGame.gameGenres.map((entry) => entry.genreId);
 
-  const genres = typedGame.gameGenres.map(
-    (gameGenre: GameGenreWithGenre) => gameGenre.genre.name,
-  );
-
-  const genreIds = typedGame.gameGenres.map(
-    (gameGenre: GameGenreWithGenre) => gameGenre.genreId,
-  );
-
-  const previousGame = await prisma.game.findFirst({
-    where: {
-      id: {
-        lt: typedGame.id,
-      },
-    },
-    orderBy: {
-      id: "desc",
-    },
-  });
-
-  const nextGame = await prisma.game.findFirst({
-    where: {
-      id: {
-        gt: typedGame.id,
-      },
-    },
-    orderBy: {
-      id: "asc",
-    },
-  });
-
-  const candidateGames = await prisma.game.findMany({
-    where: {
-      id: {
-        not: typedGame.id,
-      },
-    },
-    include: {
-      franchise: true,
-      gameGenres: {
+  const [previousGame, nextGame, candidateGames, rankedGames] =
+    await Promise.all([
+      prisma.game.findFirst({
+        where: { id: { lt: typedGame.id } },
+        orderBy: { id: "desc" },
+      }),
+      prisma.game.findFirst({
+        where: { id: { gt: typedGame.id } },
+        orderBy: { id: "asc" },
+      }),
+      prisma.game.findMany({
+        where: { id: { not: typedGame.id } },
         include: {
-          genre: true,
-        },
-      },
-      userGames: {
-        include: {
-          platform: true,
-          reviews: {
-            orderBy: {
-              reviewDate: "desc",
+          gameGenres: { include: { genre: true } },
+          userGames: {
+            include: {
+              platform: true,
+              reviews: { orderBy: { reviewDate: "desc" } },
             },
           },
         },
-      },
-    },
-  });
+      }),
+      prisma.game.findMany({
+        include: {
+          gameGenres: { include: { genre: true } },
+          userGames: {
+            include: {
+              platform: true,
+              reviews: { orderBy: { reviewDate: "desc" } },
+            },
+          },
+        },
+      }),
+    ]);
 
-  const currentGenreIds = new Set(genreIds);
+  const similarGames = buildSimilarGames(
+    typedGame,
+    candidateGames as SimilarGame[],
+    review?.overallRating ?? null,
+    genreIds,
+  );
 
-  const currentPlatformIds = new Set(
+  const personalRankings = buildPersonalRankings(
+    typedGame.id,
+    rankedGames as RankedGame[],
+    genres,
     typedGame.userGames
-      .map((userGame: GameUserGame) => userGame.platformId)
-      .filter(
-  (platformId: number | null): platformId is number =>
-    platformId != null,
-),
+      .map((copy) => copy.platform?.name)
+      .filter((name): name is string => Boolean(name)),
   );
 
-  const currentRating = review?.overallRating ?? null;
-
-  const currentReleaseYear = typedGame.releaseDate
-    ? new Date(typedGame.releaseDate).getFullYear()
-    : null;
-
-  const similarGames: SimilarGameResult[] = (candidateGames as SimilarGame[])
-    .map((candidate: SimilarGame) => {
-      const candidateUserGame = candidate.userGames[0];
-      const candidateReview = candidateUserGame?.reviews[0];
-
-      const candidateGenreIds = candidate.gameGenres.map(
-        (gameGenre: GameGenreWithGenre) => gameGenre.genreId,
-      );
-
-      const currentGenreNames = typedGame.gameGenres.map(
-  (gameGenre: GameGenreWithGenre) => gameGenre.genre.name,
-);
-
-const candidateGenreNames = candidate.gameGenres.map(
-  (gameGenre: GameGenreWithGenre) => gameGenre.genre.name,
-);
-
-      const sharedGenreCount = candidateGenreIds.filter((genreId: number) =>
-  currentGenreIds.has(genreId),
-).length;
-
-let score = 0;
-const reasons: string[] = [];
-
-const genreRatio =
-  genreIds.length > 0 ? sharedGenreCount / genreIds.length : 0;
-
-const genreScore = Math.round(genreRatio * 40);
-
-score += genreScore;
-
-const sharedGenreNames = candidateGenreNames.filter((genreName: string) =>
-  currentGenreNames.includes(genreName),
-);
-
-if (sharedGenreCount === genreIds.length && genreIds.length > 0) {
-  reasons.push(`Strong genre match: ${sharedGenreNames.join(", ")} (+${genreScore})`);
-} else if (sharedGenreCount > 0) {
-  reasons.push(
-    `Partial genre match: ${sharedGenreCount}/${genreIds.length} shared (+${genreScore})`,
+  const summary = buildReviewSummary(review);
+  const completionPercentage = calculateCompletionPercentage(
+    primaryUserGame,
+    game.hltbMain,
   );
-}
-
-      if (
-        typedGame.franchiseId &&
-        candidate.franchiseId &&
-        typedGame.franchiseId === candidate.franchiseId
-      ) {
-        score += 30;
-        reasons.push("Same Franchise");
-      }
-
-      const candidatePlatformIds = candidate.userGames
-        .map((userGame: GameUserGame) => userGame.platformId)
-        .filter(
-  (platformId: number | null): platformId is number =>
-    platformId != null,
-);
-
-      const hasSharedPlatform = candidatePlatformIds.some(
-        (platformId: number) => currentPlatformIds.has(platformId),
-      );
-
-      if (hasSharedPlatform) {
-        score += 15;
-        reasons.push("Same Platform");
-      }
-
-      if (currentRating != null && candidateReview?.overallRating != null) {
-        const ratingDifference = Math.abs(
-          currentRating - candidateReview.overallRating,
-        );
-
-        const ratingScore = Math.max(0, 15 - ratingDifference * 3);
-
-        score += ratingScore;
-
-        if (ratingDifference <= 1) {
-          reasons.push("Similar Rating");
-        }
-      }
-
-      if (currentReleaseYear && candidate.releaseDate) {
-        const releaseYearDifference = Math.abs(
-          currentReleaseYear - new Date(candidate.releaseDate).getFullYear(),
-        );
-
-        if (releaseYearDifference <= 2) {
-          score += 5;
-        } else if (releaseYearDifference <= 5) {
-          score += 3;
-        } else if (releaseYearDifference <= 10) {
-          score += 1;
-        }
-      }
-
-      return {
-        ...candidate,
-        similarityScore: score,
-        similarityReasons: reasons,
-      };
-    })
-    .filter(
-      (candidate: SimilarGameResult) => candidate.similarityScore >= 20,
-    )
-    .sort((a: SimilarGameResult, b: SimilarGameResult) => {
-      if (b.similarityScore !== a.similarityScore) {
-        return b.similarityScore - a.similarityScore;
-      }
-
-      return a.title.localeCompare(b.title);
-    })
-    .slice(0, 6);
 
   return (
-    <main className="min-h-screen bg-zinc-950 p-8 text-white">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div className="flex gap-2">
-          <Link
-            href="/"
-            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm hover:border-zinc-400"
-          >
-            ← Library
-          </Link>
-          <Link
-            href={`/admin/game/${game.id}`}
-            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm hover:border-zinc-400"
-          >
-            ⚙ Edit
-          </Link>
-        </div>
-
-        <div className="flex gap-2">
-          {previousGame && (
-            <Link
-              href={`/game/${previousGame.id}`}
-              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm hover:border-zinc-400"
-            >
-              ← Previous
+    <main className="min-h-screen bg-zinc-950 p-4 text-white sm:p-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex gap-2">
+            <Link href="/" className="secondaryButton">
+              ← Library
             </Link>
-          )}
-
-          {nextGame && (
-            <Link
-              href={`/game/${nextGame.id}`}
-              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm hover:border-zinc-400"
-            >
-              Next →
+            <Link href={`/admin/game/${game.id}`} className="secondaryButton">
+              ⚙ Edit
             </Link>
-          )}
-        </div>
-      </div>
+          </div>
 
-      <section className="grid gap-8 lg:grid-cols-[160px_1fr]">
-        <div className="w-[160px]">
-          {game.coverArtUrl ? (
-            <Image
-              src={game.coverArtUrl}
-              alt={`${game.title} cover art`}
-              width={160}
-              height={220}
-              className="rounded-lg border border-zinc-800 object-cover shadow-lg"
-            />
-          ) : (
-            <div className="flex h-[220px] w-[160px] items-center justify-center rounded-lg border border-zinc-800 bg-zinc-800 text-zinc-500">
-              No Cover
-            </div>
-          )}
-        </div>
-
-        <div>
-          <h1 className="text-4xl font-bold">{game.title}</h1>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {genres.length > 0 ? (
-              genres.map((genre: string) => (
-                <span
-                  key={genre}
-                  className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-300"
-                >
-                  {genre}
-                </span>
-              ))
-            ) : (
-              <span className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-500">
-                Unknown Genre
-              </span>
+          <div className="flex gap-2">
+            {previousGame && (
+              <Link href={`/game/${previousGame.id}`} className="secondaryButton">
+                ← Previous
+              </Link>
+            )}
+            {nextGame && (
+              <Link href={`/game/${nextGame.id}`} className="secondaryButton">
+                Next →
+              </Link>
             )}
           </div>
+        </div>
 
-          {game.franchise && (
-            <div className="mt-3">
-              <Link
-                href={`/franchise/${game.franchise.id}`}
-                className="inline-flex rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-sm text-zinc-300 hover:border-zinc-400 hover:text-white"
-              >
-                Franchise: {game.franchise.name}
-              </Link>
+        <section className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <aside>
+            <div className="sticky top-6">
+              {game.coverArtUrl ? (
+                <Image
+                  src={game.coverArtUrl}
+                  alt={`${game.title} cover art`}
+                  width={220}
+                  height={330}
+                  priority
+                  className="h-auto w-full rounded-xl border border-zinc-800 object-cover shadow-2xl"
+                />
+              ) : (
+                <div className="flex aspect-[2/3] items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-500">
+                  No Cover
+                </div>
+              )}
+
+              {personalRankings.length > 0 && (
+                <section className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300">
+                    Personal Ranking
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {personalRankings.map((ranking) => (
+                      <span
+                        key={ranking}
+                        className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200"
+                      >
+                        ★ {ranking}
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
-          )}
+          </aside>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <InfoCard label="Status" value={userGame?.status ?? "N/A"} />
-            <InfoCard
-              label="Platform"
-              value={userGame?.platform?.name ?? "N/A"}
-            />
-            <InfoCard
-              label="Your Time"
-              value={formatHours(userGame?.hoursPlayed ?? null)}
-            />
-            <InfoCard label="HLTB" value={formatHours(game.hltbMain)} />
-            <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-  <div className="mb-4 flex items-center justify-between gap-4">
-    <div>
-      <h2 className="text-xl font-bold">Owned Copies</h2>
-      <p className="mt-1 text-sm text-zinc-400">
-        All copies of this game in your collection.
-      </p>
-    </div>
+          <div className="min-w-0">
+            <header>
+              <h1 className="text-4xl font-black tracking-tight sm:text-5xl">
+                {game.title}
+              </h1>
 
- 
-  </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {genres.length > 0 ? (
+                  genres.map((genre) => (
+                    <span key={genre} className="tag">
+                      {genre}
+                    </span>
+                  ))
+                ) : (
+                  <span className="tag text-zinc-500">Unknown Genre</span>
+                )}
+                {game.franchise && (
+                  <Link href={`/franchise/${game.franchise.id}`} className="tag hover:text-white">
+                    {game.franchise.name}
+                  </Link>
+                )}
+              </div>
+            </header>
 
-  <div className="divide-y divide-zinc-800 overflow-hidden rounded-lg border border-zinc-800">
-    {typedGame.userGames.map((copy: GameUserGame) => {
-  const copyReview = copy.reviews[0];
-
-  return (
-    <div
-      key={copy.id}
-      className="grid gap-4 px-4 py-3 sm:grid-cols-[1fr_120px_100px_100px_130px_80px]"
-    >
-      <div>
-        <p className="font-semibold">
-          {copy.platform?.name ?? "Unknown Platform"}
-        </p>
-        <p className="text-sm text-zinc-500">Copy #{copy.id}</p>
-      </div>
-
-      <div>
-        <p className="text-xs text-zinc-500">Status</p>
-        <p className="text-sm font-semibold">{copy.status}</p>
-      </div>
-
-      <div>
-        <p className="text-xs text-zinc-500">Hours</p>
-        <p className="text-sm font-semibold">
-          {copy.hoursPlayed != null ? `${copy.hoursPlayed} hrs` : "N/A"}
-        </p>
-      </div>
-
-      <div>
-        <p className="text-xs text-zinc-500">Rating</p>
-        <p className="text-sm font-semibold">
-          {copyReview?.overallRating != null
-            ? `${copyReview.overallRating}/10`
-            : "N/A"}
-        </p>
-      </div>
-
-      <div>
-        <p className="text-xs text-zinc-500">Completed</p>
-        <p className="text-sm font-semibold">
-          {formatDateDisplay(copy.dateCompleted)}
-        </p>
-      </div>
-
-      <div className="flex items-center justify-end">
-        <Link
-          href={`/admin/game/${copy.gameId}/copy/${copy.id}`}
-          className="text-sm text-zinc-300 hover:text-white hover:underline"
-        >
-          Edit
-        </Link>
-      </div>
-    </div>
-  );
-})}
-  </div>
-</section>
-<InfoCard
-  label="Overall Rating"
-  value={<RatingBadge rating={review?.overallRating} compact />}
-/>
-            <InfoCard
-              label="Metacritic Rating"
-              value={game.metacriticScore ?? "N/A"}
-            />
-            <InfoCard
-              label="Date Completed"
-              value={formatDate(userGame?.dateCompleted ?? null)}
-            />
-            <InfoCard
-              label="Release Date"
-              value={formatDate(game.releaseDate)}
-            />
-          </div>
-
-          {review && (
             <section className="mt-8">
-              <h2 className="text-2xl font-bold">Rating Breakdown</h2>
-
-              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <SectionHeading
+                eyebrow="Your Playthrough"
+                title="Review Metadata"
+                description="The key details behind this review and completion."
+              />
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <InfoCard label="Status" value={formatStatus(primaryUserGame?.status)} />
+                <InfoCard label="Platform" value={primaryUserGame?.platform?.name ?? "N/A"} />
+                <InfoCard label="Date Started" value={formatCalendarDate(primaryUserGame?.dateStarted)} />
+                <InfoCard label="Date Finished" value={formatCalendarDate(primaryUserGame?.dateCompleted)} />
+                <InfoCard label="Hours" value={formatHours(primaryUserGame?.hoursPlayed ?? null)} />
+                <InfoCard label="HLTB Main" value={formatHours(game.hltbMain)} />
                 <InfoCard
-                  label="Gameplay"
-                  value={formatRating(review.gameplayRating)}
+                  label="Completion"
+                  value={completionPercentage == null ? "N/A" : `${completionPercentage}%`}
                 />
                 <InfoCard
-                  label="Story"
-                  value={formatRating(review.storyRating)}
-                />
-                <InfoCard label="Art" value={formatRating(review.artRating)} />
-                <InfoCard
-                  label="Music"
-                  value={formatRating(review.musicRating)}
+                  label="Overall Rating"
+                  value={<RatingBadge rating={review?.overallRating} compact />}
                 />
               </div>
             </section>
-          )}
 
-          {review?.notes && (
-            <section className="mt-8">
-              <h2 className="text-2xl font-bold">Notes</h2>
-              <p className="mt-3 max-w-4xl rounded-xl border border-zinc-800 bg-zinc-900 p-4 leading-7 text-zinc-300">
-                {review.notes}
-              </p>
-            </section>
-          )}
-        </div>
-      </section>
-
-      {similarGames.length > 0 && (
-        <section className="mt-12">
-          <h2 className="text-2xl font-bold">Similar Games</h2>
-
-          <div className="mt-4 flex flex-wrap justify-center lg:justify-start gap-4">
-            {similarGames.map((similarGame: SimilarGameResult) => (
-              <Link
-                key={similarGame.id}
-                href={`/game/${similarGame.id}`}
-                className="group flex w-24 flex-col items-center"
-              >
-                {similarGame.coverArtUrl ? (
-                  <Image
-                    src={similarGame.coverArtUrl}
-                    alt={`${similarGame.title} cover art`}
-                    width={96}
-                    height={144}
-                    className="h-36 w-24 rounded-md border border-zinc-800 object-cover shadow-md transition-transform group-hover:scale-105"
-                  />
-                ) : (
-                  <div className="flex h-36 w-24 items-center justify-center rounded-md border border-zinc-800 bg-zinc-800 text-xs text-zinc-500">
-                    No Cover
-                  </div>
-                )}
-
-                <p className="mt-2 w-full text-center text-xs font-semibold leading-tight text-zinc-300 group-hover:text-white">
-                  {similarGame.title}
-                </p>
-
-                <div className="mt-1 flex flex-col items-center gap-1">
-                  {similarGame.similarityReasons.map((reason: string) => (
-                    <span key={reason} className="text-[10px] text-zinc-500">
-                      ✓ {reason}
-                    </span>
-                  ))}
+            {review && (
+              <section className="mt-10">
+                <SectionHeading
+                  eyebrow="Scorecard"
+                  title="Rating Breakdown"
+                  description="A visual overview of how each part of the game scored."
+                />
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <RatingBar label="Gameplay" rating={review.gameplayRating} />
+                  <RatingBar label="Story" rating={review.storyRating} />
+                  <RatingBar label="Art" rating={review.artRating} />
+                  <RatingBar label="Music" rating={review.musicRating} />
                 </div>
-              </Link>
-            ))}
+              </section>
+            )}
+
+            {(summary.strengths.length > 0 || summary.weaknesses.length > 0) && (
+              <section className="mt-10">
+                <SectionHeading
+                  eyebrow="At a Glance"
+                  title="Review Summary"
+                  description="Automatically generated from your category ratings."
+                />
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <SummaryCard title="Strengths" items={summary.strengths} positive />
+                  <SummaryCard title="Weaknesses" items={summary.weaknesses} />
+                </div>
+              </section>
+            )}
+
+            {review?.notes && (
+              <section className="mt-10">
+                <SectionHeading eyebrow="Full Review" title="Your Notes" />
+                <div className="mt-4 whitespace-pre-wrap rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 leading-8 text-zinc-300 shadow-sm">
+                  {review.notes}
+                </div>
+              </section>
+            )}
+
+            <section className="mt-10">
+              <SectionHeading
+                eyebrow="Collection"
+                title="Owned Copies"
+                description="Every copy of this game currently in your library."
+              />
+              <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/60">
+                {typedGame.userGames.map((copy) => {
+                  const copyReview = copy.reviews[0];
+                  return (
+                    <div
+                      key={copy.id}
+                      className="grid gap-3 border-b border-zinc-800 p-4 last:border-b-0 sm:grid-cols-[1.3fr_repeat(4,1fr)_auto] sm:items-center"
+                    >
+                      <div>
+                        <p className="font-semibold">{copy.platform?.name ?? "Unknown Platform"}</p>
+                        <p className="text-xs text-zinc-500">Copy #{copy.id}</p>
+                      </div>
+                      <CopyValue label="Status" value={formatStatus(copy.status)} />
+                      <CopyValue label="Hours" value={formatHours(copy.hoursPlayed)} />
+                      <CopyValue
+                        label="Rating"
+                        value={copyReview?.overallRating != null ? `${copyReview.overallRating}/10` : "N/A"}
+                      />
+                      <CopyValue label="Completed" value={formatCalendarDate(copy.dateCompleted)} />
+                      <Link
+                        href={`/admin/game/${copy.gameId}/copy/${copy.id}`}
+                        className="text-sm font-semibold text-zinc-300 hover:text-white hover:underline"
+                      >
+                        Edit
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
           </div>
         </section>
-      )}
+
+        {similarGames.length > 0 && (
+          <section className="mt-14 border-t border-zinc-800 pt-10">
+            <SectionHeading
+              eyebrow="Keep Playing"
+              title="Similar Games"
+              description="Games in your library with the strongest overlap."
+            />
+            <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+              {similarGames.map((similarGame) => (
+                <Link key={similarGame.id} href={`/game/${similarGame.id}`} className="group">
+                  {similarGame.coverArtUrl ? (
+                    <Image
+                      src={similarGame.coverArtUrl}
+                      alt={`${similarGame.title} cover art`}
+                      width={180}
+                      height={270}
+                      className="aspect-[2/3] w-full rounded-lg border border-zinc-800 object-cover shadow-md transition group-hover:-translate-y-1 group-hover:border-zinc-600"
+                    />
+                  ) : (
+                    <div className="flex aspect-[2/3] items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-xs text-zinc-500">
+                      No Cover
+                    </div>
+                  )}
+                  <p className="mt-2 text-sm font-semibold leading-tight text-zinc-300 group-hover:text-white">
+                    {similarGame.title}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {similarGame.similarityReasons.slice(0, 2).join(" · ")}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+
+      <style>{`
+        .secondaryButton { border-radius: 0.5rem; border: 1px solid rgb(63 63 70); background: rgb(24 24 27); padding: 0.5rem 0.75rem; font-size: 0.875rem; }
+        .secondaryButton:hover { border-color: rgb(161 161 170); }
+        .tag { display: inline-flex; border-radius: 9999px; border: 1px solid rgb(63 63 70); background: rgb(24 24 27); padding: 0.375rem 0.75rem; font-size: 0.875rem; color: rgb(212 212 216); }
+      `}</style>
     </main>
   );
 }
 
-function InfoCard({
-  label,
-  value,
+function SectionHeading({
+  eyebrow,
+  title,
+  description,
 }: {
-  label: string;
-  value: React.ReactNode;
+  eyebrow: string;
+  title: string;
+  description?: string;
 }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-      <p className="text-sm text-zinc-500">{label}</p>
-      <p className="mt-1 font-semibold">{value}</p>
+    <div>
+      <p className="text-xs font-bold uppercase tracking-[0.22em] text-zinc-500">{eyebrow}</p>
+      <h2 className="mt-1 text-2xl font-bold">{title}</h2>
+      {description && <p className="mt-1 text-sm text-zinc-400">{description}</p>}
     </div>
   );
 }
 
-function formatHours(hours: number | null) {
+function InfoCard({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
+      <div className="mt-2 text-lg font-bold text-zinc-100">{value}</div>
+    </div>
+  );
+}
+
+function RatingBar({ label, rating }: { label: string; rating: number | null | undefined }) {
+  const normalized = rating == null ? 0 : Math.max(0, Math.min(10, rating));
+  const percentage = normalized * 10;
+
+  return (
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5">
+      <div className="flex items-end justify-between gap-4">
+        <p className="font-semibold text-zinc-200">{label}</p>
+        <p className="text-2xl font-black">{rating == null ? "N/A" : rating}</p>
+      </div>
+      <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800" aria-label={`${label}: ${rating ?? "not rated"} out of 10`}>
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500 transition-all"
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+      <div className="mt-2 flex justify-between text-[10px] text-zinc-600">
+        <span>0</span><span>10</span>
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  items,
+  positive = false,
+}: {
+  title: string;
+  items: SummaryItem[];
+  positive?: boolean;
+}) {
+  return (
+    <div className={`rounded-2xl border p-5 ${positive ? "border-emerald-500/25 bg-emerald-500/5" : "border-rose-500/25 bg-rose-500/5"}`}>
+      <h3 className={`text-lg font-bold ${positive ? "text-emerald-300" : "text-rose-300"}`}>{title}</h3>
+      {items.length > 0 ? (
+        <ul className="mt-4 space-y-3">
+          {items.map((item) => (
+            <li key={item.label} className="flex gap-3">
+              <span className={positive ? "text-emerald-400" : "text-rose-400"}>{positive ? "+" : "−"}</span>
+              <div>
+                <p className="font-semibold text-zinc-200">{item.label}</p>
+                <p className="text-sm text-zinc-400">{item.detail}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-sm text-zinc-500">Nothing strongly stands out in this category yet.</p>
+      )}
+    </div>
+  );
+}
+
+function CopyValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-zinc-500">{label}</p>
+      <p className="text-sm font-semibold text-zinc-200">{value}</p>
+    </div>
+  );
+}
+
+function buildReviewSummary(review: ReviewRecord | undefined) {
+  const categories = [
+    { label: "Gameplay", rating: review?.gameplayRating },
+    { label: "Story", rating: review?.storyRating },
+    { label: "Art", rating: review?.artRating },
+    { label: "Music", rating: review?.musicRating },
+  ];
+
+  const strengths = categories
+    .filter((category) => category.rating != null && category.rating >= 8)
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+    .map((category) => ({
+      label: category.label,
+      detail: strengthDescription(category.label, category.rating ?? 0),
+    }));
+
+  const weaknesses = categories
+    .filter((category) => category.rating != null && category.rating <= 5)
+    .sort((a, b) => (a.rating ?? 0) - (b.rating ?? 0))
+    .map((category) => ({
+      label: category.label,
+      detail: weaknessDescription(category.label, category.rating ?? 0),
+    }));
+
+  return { strengths, weaknesses };
+}
+
+function strengthDescription(label: string, rating: number) {
+  const adjective = rating >= 9.5 ? "Exceptional" : rating >= 9 ? "Outstanding" : "A major strength";
+  return `${adjective} ${label.toLowerCase()} (${rating}/10).`;
+}
+
+function weaknessDescription(label: string, rating: number) {
+  const adjective = rating <= 2 ? "A serious weakness" : rating <= 4 ? "A notable weakness" : "The weakest part of the experience";
+  return `${adjective} in ${label.toLowerCase()} (${rating}/10).`;
+}
+
+function buildPersonalRankings(
+  currentGameId: number,
+  games: RankedGame[],
+  currentGenres: string[],
+  currentPlatforms: string[],
+) {
+  const scoredGames = games
+    .map((game) => ({ game, rating: getLatestOverallRating(game.userGames) }))
+    .filter((entry): entry is { game: RankedGame; rating: number } => entry.rating != null)
+    .sort((a, b) => b.rating - a.rating || a.game.title.localeCompare(b.game.title));
+
+  const currentIndex = scoredGames.findIndex((entry) => entry.game.id === currentGameId);
+  const badges: string[] = [];
+
+  if (currentIndex >= 0 && currentIndex < 10) {
+    badges.push(`#${currentIndex + 1} Overall`);
+  }
+
+  const currentRating = scoredGames.find((entry) => entry.game.id === currentGameId)?.rating;
+  if (currentRating == null) return badges;
+
+  for (const genreName of currentGenres) {
+    const genreRatings = scoredGames
+      .filter(({ game }) => game.gameGenres.some((entry) => entry.genre.name === genreName))
+      .map((entry) => entry.rating);
+    if (genreRatings.length > 0 && currentRating === Math.max(...genreRatings)) {
+      badges.push(`Top ${genreName} Game`);
+    }
+  }
+
+  for (const platformName of [...new Set(currentPlatforms)]) {
+    const platformRatings = scoredGames
+      .filter(({ game }) => game.userGames.some((copy) => copy.platform?.name === platformName))
+      .map((entry) => entry.rating);
+    if (platformRatings.length > 0 && currentRating === Math.max(...platformRatings)) {
+      badges.push(`Top ${platformName} Game`);
+    }
+  }
+
+  return badges.slice(0, 6);
+}
+
+function getLatestOverallRating(userGames: UserGameRecord[]) {
+  const ratings = userGames
+    .map((copy) => copy.reviews[0]?.overallRating)
+    .filter((rating): rating is number => rating != null);
+  return ratings.length > 0 ? Math.max(...ratings) : null;
+}
+
+function calculateCompletionPercentage(userGame: UserGameRecord | undefined, hltbMain: number | null) {
+  if (!userGame) return null;
+  if (userGame.status === "COMPLETED") return 100;
+  if (userGame.hoursPlayed == null || hltbMain == null || hltbMain <= 0) return null;
+  return Math.min(100, Math.max(0, Math.round((userGame.hoursPlayed / hltbMain) * 100)));
+}
+
+function buildSimilarGames(
+  currentGame: {
+    franchiseId: number | null;
+    releaseDate: Date | null;
+    userGames: UserGameRecord[];
+  },
+  candidates: SimilarGame[],
+  currentRating: number | null,
+  genreIds: number[],
+): SimilarGameResult[] {
+  const currentGenreIds = new Set(genreIds);
+  const currentPlatformIds = new Set(
+    currentGame.userGames.map((copy) => copy.platformId).filter((id): id is number => id != null),
+  );
+  const currentReleaseYear = currentGame.releaseDate?.getFullYear() ?? null;
+
+  return candidates
+    .map((candidate) => {
+      const candidateRating = getLatestOverallRating(candidate.userGames);
+      const candidateGenreIds = candidate.gameGenres.map((entry) => entry.genreId);
+      const sharedGenreCount = candidateGenreIds.filter((id) => currentGenreIds.has(id)).length;
+      const reasons: string[] = [];
+      let score = genreIds.length > 0 ? Math.round((sharedGenreCount / genreIds.length) * 40) : 0;
+
+      if (sharedGenreCount > 0) reasons.push(`${sharedGenreCount} shared genre${sharedGenreCount === 1 ? "" : "s"}`);
+      if (currentGame.franchiseId && candidate.franchiseId === currentGame.franchiseId) {
+        score += 30;
+        reasons.push("Same franchise");
+      }
+      if (candidate.userGames.some((copy) => copy.platformId != null && currentPlatformIds.has(copy.platformId))) {
+        score += 15;
+        reasons.push("Same platform");
+      }
+      if (currentRating != null && candidateRating != null) {
+        const difference = Math.abs(currentRating - candidateRating);
+        score += Math.max(0, 15 - difference * 3);
+        if (difference <= 1) reasons.push("Similar rating");
+      }
+      if (currentReleaseYear && candidate.releaseDate) {
+        const difference = Math.abs(currentReleaseYear - candidate.releaseDate.getFullYear());
+        if (difference <= 2) score += 5;
+        else if (difference <= 5) score += 3;
+      }
+
+      return { ...candidate, similarityScore: score, similarityReasons: reasons };
+    })
+    .filter((candidate) => candidate.similarityScore >= 20)
+    .sort((a, b) => b.similarityScore - a.similarityScore || a.title.localeCompare(b.title))
+    .slice(0, 6);
+}
+
+function formatHours(hours: number | null | undefined) {
   return hours != null ? `${hours} hrs` : "N/A";
 }
 
-function formatRating(rating: number | null | undefined) {
-  return rating != null ? `${rating}/10` : "N/A";
+function formatStatus(status: string | undefined) {
+  if (!status) return "N/A";
+  return status
+    .replace("ONHOLD", "On Hold")
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatDate(date: Date | string | null) {
+function formatCalendarDate(date: Date | string | null | undefined) {
   if (!date) return "N/A";
-
-  return new Date(date).toLocaleDateString("en-CA", {
+  const value = typeof date === "string" ? date.slice(0, 10) : date.toISOString().slice(0, 10);
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
     month: "short",
     day: "numeric",
-  });
-}
-function formatDateDisplay(date: Date | string | null | undefined) {
-  if (!date) return "N/A";
-
-  return new Date(date).toLocaleDateString("en-CA", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
 }

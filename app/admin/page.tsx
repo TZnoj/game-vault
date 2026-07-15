@@ -62,24 +62,32 @@ export default async function AdminPage() {
             </p>
           </div>
 
-          <Link
-            href="/admin/new"
-            className="rounded-lg border border-zinc-700 bg-zinc-100 px-4 py-2 font-semibold text-zinc-950 hover:bg-white"
-          >
-            + Add Game
-          </Link>
-          <Link
-            href="/admin/missing-info"
-            className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 font-semibold text-white hover:border-zinc-400"
-          >
-            Missing Info
-          </Link>
-          <Link
-  href="/admin/enrichment"
-  className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 font-semibold text-white hover:border-zinc-400"
->
-  Enrichment Logs
-</Link>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Link
+              href="/admin/collection-health"
+              className="rounded-lg border border-emerald-700/60 bg-emerald-500/10 px-4 py-2 font-semibold text-emerald-200 hover:border-emerald-500 hover:bg-emerald-500/15"
+            >
+              Collection Health
+            </Link>
+            <Link
+              href="/admin/missing-info"
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 font-semibold text-white hover:border-zinc-400"
+            >
+              Missing Info
+            </Link>
+            <Link
+              href="/admin/enrichment"
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 font-semibold text-white hover:border-zinc-400"
+            >
+              Enrichment Logs
+            </Link>
+            <Link
+              href="/admin/new"
+              className="rounded-lg border border-zinc-700 bg-zinc-100 px-4 py-2 font-semibold text-zinc-950 hover:bg-white"
+            >
+              + Add Game
+            </Link>
+          </div>
         </div>
 
         <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
@@ -88,6 +96,27 @@ export default async function AdminPage() {
             art, platform, genres, ratings, and notes.
           </p>
         </div>
+
+        <Link
+          href="/admin/collection-health"
+          className="mb-6 block rounded-2xl border border-emerald-900/70 bg-emerald-950/20 p-5 transition hover:border-emerald-700 hover:bg-emerald-950/30"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">
+                Database quality
+              </p>
+              <h2 className="mt-1 text-xl font-black text-white">Collection Health</h2>
+              <p className="mt-1 text-sm text-zinc-400">
+                Review missing metadata, unreviewed completions, date problems,
+                possible duplicates, and recommendation issues.
+              </p>
+            </div>
+            <span className="shrink-0 rounded-xl border border-emerald-800 bg-emerald-500/10 px-4 py-2 text-sm font-bold text-emerald-200">
+              Open dashboard →
+            </span>
+          </div>
+        </Link>
 
         <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
           <div className="grid grid-cols-[64px_1fr_140px_120px_90px] gap-4 border-b border-zinc-800 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">

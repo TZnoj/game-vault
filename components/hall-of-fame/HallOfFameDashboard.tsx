@@ -46,7 +46,7 @@ function platformMatches(entry: Entry, aliases: string[]) {
 }
 
 function hrefFor(entry: Entry) {
-  return `/game/${entry.slug ?? entry.id}`;
+  return `/game/${entry.id}`;
 }
 
 function sortOverall(entries: Entry[]) {

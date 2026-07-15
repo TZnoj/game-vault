@@ -8,6 +8,7 @@ type Entry = {
   title: string;
   dateCompleted: string;
   hoursPlayed: number | null;
+  hltbMain: number | null;
   overallRating: number | null;
   platform: { id: number; name: string } | null;
   genres: { id: number; name: string }[];
@@ -19,6 +20,7 @@ type YearStats = {
   games: number;
   hours: number;
   averageRating: number | null;
+  weightedRating: number | null;
   averageHours: number | null;
   genres: Map<string, number>;
   platforms: Map<string, number>;
@@ -40,6 +42,35 @@ function average(values: number[]) {
 
 function formatDecimal(value: number | null, digits = 1) {
   return value == null ? "N/A" : value.toFixed(digits);
+}
+
+function squareRootWeightedRating(entries: Entry[]) {
+  const ratedEntries = entries.filter(
+    (entry): entry is Entry & { overallRating: number } =>
+      entry.overallRating != null,
+  );
+
+  if (ratedEntries.length === 0) return null;
+
+  let weightedTotal = 0;
+  let totalWeight = 0;
+
+  for (const entry of ratedEntries) {
+    // Prefer recorded playtime, then HLTB Main. A one-hour neutral fallback
+    // keeps unrated-time games represented without allowing them to dominate.
+    const time =
+      entry.hoursPlayed != null && entry.hoursPlayed > 0
+        ? entry.hoursPlayed
+        : entry.hltbMain != null && entry.hltbMain > 0
+          ? entry.hltbMain
+          : 1;
+    const weight = Math.sqrt(time);
+
+    weightedTotal += entry.overallRating * weight;
+    totalWeight += weight;
+  }
+
+  return totalWeight > 0 ? weightedTotal / totalWeight : null;
 }
 
 function buildStats(year: number, entries: Entry[]): YearStats {
@@ -73,6 +104,7 @@ function buildStats(year: number, entries: Entry[]): YearStats {
     games: yearEntries.length,
     hours: hours.reduce((sum, value) => sum + value, 0),
     averageRating: average(ratings),
+    weightedRating: squareRootWeightedRating(yearEntries),
     averageHours: average(hours),
     genres,
     platforms,
@@ -118,38 +150,31 @@ export function YearComparisonDashboard({ entries }: { entries: Entry[] }) {
   const maxHours = Math.max(1, ...visibleStats.map((stats) => stats.hours));
   const maxRating = Math.max(
     1,
-    ...visibleStats.map((stats) => stats.averageRating ?? 0),
+    ...visibleStats.flatMap((stats) => [
+      stats.averageRating ?? 0,
+      stats.weightedRating ?? 0,
+    ]),
   );
 
   const latestYear = availableYears.at(-1) ?? new Date().getFullYear();
   const previousYear = availableYears.at(-2) ?? latestYear - 1;
-  const now = new Date();
-  const latestIsCurrentYear = latestYear === now.getFullYear();
+  const latestIsCurrentYear = latestYear === new Date().getFullYear();
 
-  const latestTrendEntries = entries.filter((entry) => {
-    const parts = utcParts(entry.dateCompleted);
-    return parts.year === latestYear;
-  });
-  const previousTrendEntries = entries.filter((entry) => {
-    const parts = utcParts(entry.dateCompleted);
-    if (parts.year !== previousYear) return false;
-    if (!latestIsCurrentYear) return true;
-    return (
-      parts.month < now.getMonth() ||
-      (parts.month === now.getMonth() && parts.day <= now.getDate())
-    );
-  });
-
-  const latestTrend = buildStats(latestYear, latestTrendEntries);
-  const previousTrend = buildStats(previousYear, previousTrendEntries);
+  // Personal trends must use the same annual aggregates displayed in the
+  // year summary cards. This keeps values such as average rating consistent
+  // everywhere on the page.
+  const latestTrend =
+    allStats.find((stats) => stats.year === latestYear) ??
+    buildStats(latestYear, entries);
+  const previousTrend =
+    allStats.find((stats) => stats.year === previousYear) ??
+    buildStats(previousYear, entries);
 
   const trends = useMemo(() => {
     if (availableYears.length < 2) return ["Add completions from another year to unlock personal trends."];
 
     const prefix = latestIsCurrentYear ? `So far in ${latestYear}` : `In ${latestYear}`;
-    const comparison = latestIsCurrentYear
-      ? `the same point in ${previousYear}`
-      : `${previousYear}`;
+    const comparison = `${previousYear}`;
     const items: string[] = [];
 
     const gameDelta = latestTrend.games - previousTrend.games;
@@ -173,6 +198,16 @@ export function YearComparisonDashboard({ entries }: { entries: Entry[] }) {
       const delta = latestTrend.averageRating - previousTrend.averageRating;
       items.push(
         `Your average rating ${trendWord(delta)} from ${previousTrend.averageRating.toFixed(1)} to ${latestTrend.averageRating.toFixed(1)}.`,
+      );
+    }
+
+    if (
+      latestTrend.weightedRating != null &&
+      previousTrend.weightedRating != null
+    ) {
+      const delta = latestTrend.weightedRating - previousTrend.weightedRating;
+      items.push(
+        `Your time-weighted rating ${trendWord(delta)} from ${previousTrend.weightedRating.toFixed(1)} to ${latestTrend.weightedRating.toFixed(1)}.`,
       );
     }
 
@@ -320,6 +355,16 @@ export function YearComparisonDashboard({ entries }: { entries: Entry[] }) {
               <Metric label="Avg. rating" value={formatDecimal(stats.averageRating)} suffix="/10" />
               <Metric label="Avg. length" value={formatDecimal(stats.averageHours)} suffix="h" />
             </div>
+            <div className="mt-5 rounded-2xl border border-violet-500/30 bg-violet-500/10 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-violet-300">Time-weighted rating</p>
+              <p className="mt-1 text-3xl font-black text-white">
+                {formatDecimal(stats.weightedRating)}
+                <span className="ml-1 text-sm text-violet-300">/10</span>
+              </p>
+              <p className="mt-2 text-xs leading-5 text-zinc-400">
+                Ratings are weighted by the square root of playtime, so longer games matter more without dominating the year.
+              </p>
+            </div>
             <div className="mt-5 border-t border-zinc-800 pt-4 text-sm text-zinc-400">
               <p><span className="text-zinc-200">Top genre:</span> {topRows(stats.genres, 1)[0]?.[0] ?? "N/A"}</p>
               <p className="mt-2"><span className="text-zinc-200">Top platform:</span> {topRows(stats.platforms, 1)[0]?.[0] ?? "N/A"}</p>
@@ -328,10 +373,11 @@ export function YearComparisonDashboard({ entries }: { entries: Entry[] }) {
         ))}
       </section>
 
-      <section className="mt-8 grid gap-6 xl:grid-cols-3">
+      <section className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         <BarChart title="Games completed" stats={visibleStats} getValue={(stats) => stats.games} max={maxGames} format={(value) => value.toFixed(0)} />
         <BarChart title="Hours played" stats={visibleStats} getValue={(stats) => stats.hours} max={maxHours} format={(value) => value.toFixed(1)} />
         <BarChart title="Average rating" stats={visibleStats} getValue={(stats) => stats.averageRating ?? 0} max={Math.max(10, maxRating)} format={(value) => value ? `${value.toFixed(1)}/10` : "N/A"} />
+        <BarChart title="Time-weighted rating" stats={visibleStats} getValue={(stats) => stats.weightedRating ?? 0} max={Math.max(10, maxRating)} format={(value) => value ? `${value.toFixed(1)}/10` : "N/A"} />
       </section>
 
       <section className="mt-8 grid gap-6 xl:grid-cols-2">

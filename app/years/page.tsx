@@ -12,6 +12,7 @@ type CompletedEntry = {
   game: {
     id: number;
     title: string;
+    hltbMain: number | null;
     gameGenres: { genre: { id: number; name: string } }[];
   };
   reviews: {
@@ -69,6 +70,7 @@ export default async function YearsPage() {
     title: entry.game.title,
     dateCompleted: entry.dateCompleted!.toISOString(),
     hoursPlayed: entry.hoursPlayed,
+    hltbMain: entry.game.hltbMain,
     overallRating: entry.reviews[0]?.overallRating ?? null,
     platform: entry.platform
       ? { id: entry.platform.id, name: entry.platform.name }

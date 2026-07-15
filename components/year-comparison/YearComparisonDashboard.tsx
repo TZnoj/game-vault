@@ -428,20 +428,15 @@ export function YearComparisonDashboard({ entries }: { entries: Entry[] }) {
               className="group mt-5 w-full rounded-2xl border border-violet-500/30 bg-violet-500/10 p-4 text-left transition hover:border-violet-400 hover:bg-violet-500/15 focus:outline-none focus:ring-2 focus:ring-violet-400"
               aria-label={`See how each game affects the ${stats.year} time-weighted rating`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-violet-300">Time-weighted rating</p>
-                  <p className="mt-1 text-3xl font-black text-white">
-                    {formatDecimal(stats.weightedRating)}
-                    <span className="ml-1 text-sm text-violet-300">/10</span>
-                  </p>
-                </div>
-                <span className="rounded-full border border-violet-400/30 px-2.5 py-1 text-[11px] font-bold text-violet-200 transition group-hover:border-violet-300">
-                  View impact
-                </span>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-violet-300">Time-weighted rating</p>
+                <p className="mt-1 text-3xl font-black text-white">
+                  {formatDecimal(stats.weightedRating)}
+                  <span className="ml-1 text-sm text-violet-300">/10</span>
+                </p>
               </div>
               <p className="mt-2 text-xs leading-5 text-zinc-400">
-                Ratings are weighted by the square root of playtime. Click to inspect every game’s contribution.
+                Ratings are weighted by the square root of playtime. Click the card to inspect every game’s contribution.
               </p>
             </button>
             <div className="mt-5 border-t border-zinc-800 pt-4 text-sm text-zinc-400">

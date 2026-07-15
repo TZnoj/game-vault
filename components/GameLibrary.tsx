@@ -106,7 +106,7 @@ export function GameLibrary({
         ...new Set(
           userGames
             .map((item) => item.platform?.name)
-            .filter((value): value is string => Boolean(value)),
+            .filter((value): value is string => typeof value === "string"),
         ),
       ].sort(),
     [userGames],
@@ -119,7 +119,8 @@ export function GameLibrary({
             .map((item) => item.game.franchise?.name)
             .filter(
               (value): value is string =>
-                Boolean(value) && value.toLowerCase() !== "standalone",
+                typeof value === "string" &&
+                value.toLowerCase() !== "standalone",
             ),
         ),
       ].sort(),

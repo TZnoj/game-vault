@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 
 type Entry = {
   id: number;
@@ -14,6 +15,16 @@ type Entry = {
   genres: { id: number; name: string }[];
 };
 
+type WeightedRatingDetail = {
+  entry: Entry & { overallRating: number };
+  time: number;
+  timeSource: "Recorded hours" | "HLTB Main" | "1-hour fallback";
+  weight: number;
+  weightShare: number;
+  weightedPoints: number;
+  impact: number;
+};
+
 type YearStats = {
   year: number;
   entries: Entry[];
@@ -21,6 +32,7 @@ type YearStats = {
   hours: number;
   averageRating: number | null;
   weightedRating: number | null;
+  weightedDetails: WeightedRatingDetail[];
   averageHours: number | null;
   genres: Map<string, number>;
   platforms: Map<string, number>;
@@ -44,33 +56,68 @@ function formatDecimal(value: number | null, digits = 1) {
   return value == null ? "N/A" : value.toFixed(digits);
 }
 
-function squareRootWeightedRating(entries: Entry[]) {
+function squareRootWeightedData(entries: Entry[]) {
   const ratedEntries = entries.filter(
     (entry): entry is Entry & { overallRating: number } =>
       entry.overallRating != null,
   );
 
-  if (ratedEntries.length === 0) return null;
-
-  let weightedTotal = 0;
-  let totalWeight = 0;
-
-  for (const entry of ratedEntries) {
-    // Prefer recorded playtime, then HLTB Main. A one-hour neutral fallback
-    // keeps unrated-time games represented without allowing them to dominate.
-    const time =
-      entry.hoursPlayed != null && entry.hoursPlayed > 0
-        ? entry.hoursPlayed
-        : entry.hltbMain != null && entry.hltbMain > 0
-          ? entry.hltbMain
-          : 1;
-    const weight = Math.sqrt(time);
-
-    weightedTotal += entry.overallRating * weight;
-    totalWeight += weight;
+  if (ratedEntries.length === 0) {
+    return { rating: null, details: [] as WeightedRatingDetail[] };
   }
 
-  return totalWeight > 0 ? weightedTotal / totalWeight : null;
+  const base = ratedEntries.map((entry) => {
+    const hasRecordedHours = entry.hoursPlayed != null && entry.hoursPlayed > 0;
+    const hasHltb = entry.hltbMain != null && entry.hltbMain > 0;
+    const time = hasRecordedHours
+      ? entry.hoursPlayed!
+      : hasHltb
+        ? entry.hltbMain!
+        : 1;
+    const timeSource: WeightedRatingDetail["timeSource"] = hasRecordedHours
+      ? "Recorded hours"
+      : hasHltb
+        ? "HLTB Main"
+        : "1-hour fallback";
+
+    return { entry, time, timeSource, weight: Math.sqrt(time) };
+  });
+
+  const totalWeight = base.reduce((sum, item) => sum + item.weight, 0);
+  const weightedTotal = base.reduce(
+    (sum, item) => sum + item.entry.overallRating * item.weight,
+    0,
+  );
+  const rating = totalWeight > 0 ? weightedTotal / totalWeight : null;
+
+  const details: WeightedRatingDetail[] = base.map((item) => {
+    const remainingWeight = totalWeight - item.weight;
+    const withoutGame =
+      remainingWeight > 0
+        ? (weightedTotal - item.entry.overallRating * item.weight) /
+          remainingWeight
+        : rating;
+
+    return {
+      ...item,
+      weightShare: totalWeight > 0 ? item.weight / totalWeight : 0,
+      weightedPoints:
+        totalWeight > 0
+          ? (item.entry.overallRating * item.weight) / totalWeight
+          : 0,
+      impact:
+        rating != null && withoutGame != null ? rating - withoutGame : 0,
+    };
+  });
+
+  details.sort(
+    (a, b) =>
+      Math.abs(b.impact) - Math.abs(a.impact) ||
+      b.weightShare - a.weightShare ||
+      a.entry.title.localeCompare(b.entry.title),
+  );
+
+  return { rating, details };
 }
 
 function buildStats(year: number, entries: Entry[]): YearStats {
@@ -98,13 +145,16 @@ function buildStats(year: number, entries: Entry[]): YearStats {
     }
   }
 
+  const weighted = squareRootWeightedData(yearEntries);
+
   return {
     year,
     entries: yearEntries,
     games: yearEntries.length,
     hours: hours.reduce((sum, value) => sum + value, 0),
     averageRating: average(ratings),
-    weightedRating: squareRootWeightedRating(yearEntries),
+    weightedRating: weighted.rating,
+    weightedDetails: weighted.details,
     averageHours: average(hours),
     genres,
     platforms,
@@ -137,11 +187,28 @@ export function YearComparisonDashboard({ entries }: { entries: Entry[] }) {
 
   const defaultYears = availableYears.slice(-4);
   const [selectedYears, setSelectedYears] = useState<number[]>(defaultYears);
+  const [weightedBreakdownYear, setWeightedBreakdownYear] = useState<number | null>(null);
 
   const allStats = useMemo(
     () => availableYears.map((year) => buildStats(year, entries)),
     [availableYears, entries],
   );
+  useEffect(() => {
+    if (weightedBreakdownYear == null) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setWeightedBreakdownYear(null);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [weightedBreakdownYear]);
+
+  const weightedBreakdown =
+    weightedBreakdownYear == null
+      ? null
+      : allStats.find((stats) => stats.year === weightedBreakdownYear) ?? null;
+
   const visibleStats = allStats.filter((stats) =>
     selectedYears.includes(stats.year),
   );
@@ -355,16 +422,28 @@ export function YearComparisonDashboard({ entries }: { entries: Entry[] }) {
               <Metric label="Avg. rating" value={formatDecimal(stats.averageRating)} suffix="/10" />
               <Metric label="Avg. length" value={formatDecimal(stats.averageHours)} suffix="h" />
             </div>
-            <div className="mt-5 rounded-2xl border border-violet-500/30 bg-violet-500/10 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-violet-300">Time-weighted rating</p>
-              <p className="mt-1 text-3xl font-black text-white">
-                {formatDecimal(stats.weightedRating)}
-                <span className="ml-1 text-sm text-violet-300">/10</span>
-              </p>
+            <button
+              type="button"
+              onClick={() => setWeightedBreakdownYear(stats.year)}
+              className="group mt-5 w-full rounded-2xl border border-violet-500/30 bg-violet-500/10 p-4 text-left transition hover:border-violet-400 hover:bg-violet-500/15 focus:outline-none focus:ring-2 focus:ring-violet-400"
+              aria-label={`See how each game affects the ${stats.year} time-weighted rating`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-violet-300">Time-weighted rating</p>
+                  <p className="mt-1 text-3xl font-black text-white">
+                    {formatDecimal(stats.weightedRating)}
+                    <span className="ml-1 text-sm text-violet-300">/10</span>
+                  </p>
+                </div>
+                <span className="rounded-full border border-violet-400/30 px-2.5 py-1 text-[11px] font-bold text-violet-200 transition group-hover:border-violet-300">
+                  View impact
+                </span>
+              </div>
               <p className="mt-2 text-xs leading-5 text-zinc-400">
-                Ratings are weighted by the square root of playtime, so longer games matter more without dominating the year.
+                Ratings are weighted by the square root of playtime. Click to inspect every game’s contribution.
               </p>
-            </div>
+            </button>
             <div className="mt-5 border-t border-zinc-800 pt-4 text-sm text-zinc-400">
               <p><span className="text-zinc-200">Top genre:</span> {topRows(stats.genres, 1)[0]?.[0] ?? "N/A"}</p>
               <p className="mt-2"><span className="text-zinc-200">Top platform:</span> {topRows(stats.platforms, 1)[0]?.[0] ?? "N/A"}</p>
@@ -403,7 +482,186 @@ export function YearComparisonDashboard({ entries }: { entries: Entry[] }) {
           ))}
         </div>
       </section>
+
+      {weightedBreakdown && (
+        <WeightedRatingModal
+          stats={weightedBreakdown}
+          onClose={() => setWeightedBreakdownYear(null)}
+        />
+      )}
+
     </main>
+  );
+}
+
+function WeightedRatingModal({
+  stats,
+  onClose,
+}: {
+  stats: YearStats;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="weighted-rating-title"
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target) onClose();
+      }}
+    >
+      <div className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-3xl border border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/60">
+        <div className="flex items-start justify-between gap-4 border-b border-zinc-800 p-5 sm:p-7">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-violet-300">
+              {stats.year} calculation
+            </p>
+            <h2 id="weighted-rating-title" className="mt-2 text-2xl font-black sm:text-3xl">
+              Time-weighted rating: {formatDecimal(stats.weightedRating)}/10
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">
+              Weight equals √time. “Impact” is how much this game changes the final yearly score compared with calculating the year without it.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded-xl border border-zinc-700 px-3 py-2 text-sm font-bold text-zinc-300 hover:border-violet-400 hover:text-white"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="max-h-[calc(90vh-145px)] overflow-y-auto p-4 sm:p-7">
+          {stats.weightedDetails.length === 0 ? (
+            <p className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 text-zinc-400">
+              No rated games are available for this year.
+            </p>
+          ) : (
+            <>
+              <div className="mb-5 grid gap-3 sm:grid-cols-3">
+                <ModalMetric label="Rated games" value={stats.weightedDetails.length.toString()} />
+                <ModalMetric
+                  label="Total √time weight"
+                  value={stats.weightedDetails.reduce((sum, item) => sum + item.weight, 0).toFixed(2)}
+                />
+                <ModalMetric
+                  label="Largest influence"
+                  value={stats.weightedDetails[0]?.entry.title ?? "N/A"}
+                  compact
+                />
+              </div>
+
+              <div className="hidden overflow-hidden rounded-2xl border border-zinc-800 lg:block">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-zinc-900 text-xs uppercase tracking-wider text-zinc-500">
+                    <tr>
+                      <th className="px-4 py-3">Game</th>
+                      <th className="px-4 py-3">Rating</th>
+                      <th className="px-4 py-3">Time used</th>
+                      <th className="px-4 py-3">√time weight</th>
+                      <th className="px-4 py-3">Weight share</th>
+                      <th className="px-4 py-3">Score contribution</th>
+                      <th className="px-4 py-3">Impact</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800">
+                    {stats.weightedDetails.map((detail) => (
+                      <tr key={detail.entry.id} className="bg-zinc-950/60 hover:bg-zinc-900/70">
+                        <td className="px-4 py-4">
+                          <Link
+                            href={`/game/${detail.entry.gameId}`}
+                            className="font-semibold text-white hover:text-violet-300"
+                          >
+                            {detail.entry.title}
+                          </Link>
+                          <p className="mt-1 text-xs text-zinc-500">{detail.timeSource}</p>
+                        </td>
+                        <td className="px-4 py-4 font-bold">{detail.entry.overallRating.toFixed(1)}/10</td>
+                        <td className="px-4 py-4">{detail.time.toFixed(1)}h</td>
+                        <td className="px-4 py-4">{detail.weight.toFixed(2)}</td>
+                        <td className="px-4 py-4">{(detail.weightShare * 100).toFixed(1)}%</td>
+                        <td className="px-4 py-4">{detail.weightedPoints.toFixed(2)} pts</td>
+                        <td className="px-4 py-4">
+                          <ImpactPill impact={detail.impact} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-3 lg:hidden">
+                {stats.weightedDetails.map((detail) => (
+                  <article key={detail.entry.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/55 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <Link href={`/game/${detail.entry.gameId}`} className="font-bold text-white hover:text-violet-300">
+                          {detail.entry.title}
+                        </Link>
+                        <p className="mt-1 text-xs text-zinc-500">{detail.timeSource}</p>
+                      </div>
+                      <ImpactPill impact={detail.impact} />
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                      <SmallDetail label="Rating" value={`${detail.entry.overallRating.toFixed(1)}/10`} />
+                      <SmallDetail label="Time" value={`${detail.time.toFixed(1)}h`} />
+                      <SmallDetail label="√time weight" value={detail.weight.toFixed(2)} />
+                      <SmallDetail label="Weight share" value={`${(detail.weightShare * 100).toFixed(1)}%`} />
+                      <SmallDetail label="Score contribution" value={`${detail.weightedPoints.toFixed(2)} pts`} />
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <p className="mt-5 text-xs leading-5 text-zinc-500">
+                Score contribution values add up to the final weighted rating. Impact values do not add together; each is a separate leave-one-out comparison.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImpactPill({ impact }: { impact: number }) {
+  const rounded = Math.abs(impact) < 0.005 ? 0 : impact;
+  const positive = rounded > 0;
+  const negative = rounded < 0;
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${
+        positive
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+          : negative
+            ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
+            : "border-zinc-700 bg-zinc-800 text-zinc-300"
+      }`}
+      title="Change in the yearly weighted rating caused by including this game"
+    >
+      {positive ? "+" : ""}{rounded.toFixed(2)}
+    </span>
+  );
+}
+
+function ModalMetric({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
+  return (
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">{label}</p>
+      <p className={`mt-2 font-black text-white ${compact ? "text-base" : "text-2xl"}`}>{value}</p>
+    </div>
+  );
+}
+
+function SmallDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">{label}</p>
+      <p className="mt-1 font-semibold text-zinc-200">{value}</p>
+    </div>
   );
 }
 

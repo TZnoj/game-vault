@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { RatingBadge } from "@/components/RatingBadge";
+import { GameRecommendations } from "@/components/recommendations/GameRecommendations";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -341,40 +342,7 @@ export default async function GamePage({ params }: PageProps) {
           </div>
         </section>
 
-        {similarGames.length > 0 && (
-          <section className="mt-14 border-t border-zinc-800 pt-10">
-            <SectionHeading
-              eyebrow="Keep Playing"
-              title="Similar Games"
-              description="Games in your library with the strongest overlap."
-            />
-            <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-              {similarGames.map((similarGame) => (
-                <Link key={similarGame.id} href={`/game/${similarGame.id}`} className="group">
-                  {similarGame.coverArtUrl ? (
-                    <Image
-                      src={similarGame.coverArtUrl}
-                      alt={`${similarGame.title} cover art`}
-                      width={180}
-                      height={270}
-                      className="aspect-[2/3] w-full rounded-lg border border-zinc-800 object-cover shadow-md transition group-hover:-translate-y-1 group-hover:border-zinc-600"
-                    />
-                  ) : (
-                    <div className="flex aspect-[2/3] items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-xs text-zinc-500">
-                      No Cover
-                    </div>
-                  )}
-                  <p className="mt-2 text-sm font-semibold leading-tight text-zinc-300 group-hover:text-white">
-                    {similarGame.title}
-                  </p>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    {similarGame.similarityReasons.slice(0, 2).join(" · ")}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+        <GameRecommendations gameId={game.id} />
       </div>
 
       <style>{`

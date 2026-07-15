@@ -156,7 +156,9 @@ export default async function GamePage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-zinc-950 p-4 text-white sm:p-8">
-      <div className="mb-5"><BackButton fallbackHref="/" /></div>
+      <div className="mb-5">
+        <BackButton fallbackHref="/" />
+      </div>
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex gap-2">
@@ -172,7 +174,10 @@ export default async function GamePage({ params }: PageProps) {
 
           <div className="flex gap-2">
             {previousGame && (
-              <Link href={`/game/${previousGame.id}`} className="secondaryButton">
+              <Link
+                href={`/game/${previousGame.id}`}
+                className="secondaryButton"
+              >
                 ← Previous
               </Link>
             )}
@@ -239,7 +244,10 @@ export default async function GamePage({ params }: PageProps) {
                   <span className="tag text-zinc-500">Unknown Genre</span>
                 )}
                 {game.franchise && (
-                  <Link href={`/franchise/${game.franchise.id}`} className="tag hover:text-white">
+                  <Link
+                    href={`/franchise/${game.franchise.id}`}
+                    className="tag hover:text-white"
+                  >
                     {game.franchise.name}
                   </Link>
                 )}
@@ -253,15 +261,45 @@ export default async function GamePage({ params }: PageProps) {
                 description="The key details behind this review and completion."
               />
               <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <InfoCard label="Status" value={formatStatus(primaryUserGame?.status)} />
-                <InfoCard label="Platform" value={primaryUserGame?.platform?.name ?? "N/A"} />
-                <InfoCard label="Date Started" value={formatCalendarDate(primaryUserGame?.dateStarted)} />
-                <InfoCard label="Date Finished" value={formatCalendarDate(primaryUserGame?.dateCompleted)} />
-                <InfoCard label="Hours" value={formatHours(primaryUserGame?.hoursPlayed ?? null)} />
-                <InfoCard label="HLTB Main" value={formatHours(game.hltbMain)} />
+                <InfoCard
+                  label="Status"
+                  value={formatStatus(primaryUserGame?.status)}
+                />
+                <InfoCard
+                  label="Platform"
+                  value={primaryUserGame?.platform?.name ?? "N/A"}
+                />
+                <InfoCard
+                  label="Date Started"
+                  value={formatCalendarDate(primaryUserGame?.dateStarted)}
+                />
+                <InfoCard
+                  label="Date Finished"
+                  value={formatCalendarDate(primaryUserGame?.dateCompleted)}
+                />
+                <InfoCard
+                  label="Hours"
+                  value={formatHours(primaryUserGame?.hoursPlayed ?? null)}
+                />
+                <InfoCard
+                  label="HLTB Main"
+                  value={formatHours(game.hltbMain)}
+                />
+                <InfoCard
+                  label="Metacritic"
+                  value={
+                    game.metacriticScore == null || game.metacriticScore < 0
+                      ? "N/A"
+                      : `${game.metacriticScore}/100`
+                  }
+                />
                 <InfoCard
                   label="Completion"
-                  value={completionPercentage == null ? "N/A" : `${completionPercentage}%`}
+                  value={
+                    completionPercentage == null
+                      ? "N/A"
+                      : `${completionPercentage}%`
+                  }
                 />
                 <InfoCard
                   label="Overall Rating"
@@ -286,7 +324,8 @@ export default async function GamePage({ params }: PageProps) {
               </section>
             )}
 
-            {(summary.strengths.length > 0 || summary.weaknesses.length > 0) && (
+            {(summary.strengths.length > 0 ||
+              summary.weaknesses.length > 0) && (
               <section className="mt-10">
                 <SectionHeading
                   eyebrow="At a Glance"
@@ -294,7 +333,11 @@ export default async function GamePage({ params }: PageProps) {
                   description="Automatically generated from your category ratings."
                 />
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <SummaryCard title="Strengths" items={summary.strengths} positive />
+                  <SummaryCard
+                    title="Strengths"
+                    items={summary.strengths}
+                    positive
+                  />
                   <SummaryCard title="Weaknesses" items={summary.weaknesses} />
                 </div>
               </section>
@@ -324,16 +367,31 @@ export default async function GamePage({ params }: PageProps) {
                       className="grid gap-3 border-b border-zinc-800 p-4 last:border-b-0 sm:grid-cols-[1.3fr_repeat(4,1fr)_auto] sm:items-center"
                     >
                       <div>
-                        <p className="font-semibold">{copy.platform?.name ?? "Unknown Platform"}</p>
+                        <p className="font-semibold">
+                          {copy.platform?.name ?? "Unknown Platform"}
+                        </p>
                         <p className="text-xs text-zinc-500">Copy #{copy.id}</p>
                       </div>
-                      <CopyValue label="Status" value={formatStatus(copy.status)} />
-                      <CopyValue label="Hours" value={formatHours(copy.hoursPlayed)} />
+                      <CopyValue
+                        label="Status"
+                        value={formatStatus(copy.status)}
+                      />
+                      <CopyValue
+                        label="Hours"
+                        value={formatHours(copy.hoursPlayed)}
+                      />
                       <CopyValue
                         label="Rating"
-                        value={copyReview?.overallRating != null ? `${copyReview.overallRating}/10` : "N/A"}
+                        value={
+                          copyReview?.overallRating != null
+                            ? `${copyReview.overallRating}/10`
+                            : "N/A"
+                        }
                       />
-                      <CopyValue label="Completed" value={formatCalendarDate(copy.dateCompleted)} />
+                      <CopyValue
+                        label="Completed"
+                        value={formatCalendarDate(copy.dateCompleted)}
+                      />
                       {isAdmin ? (
                         <Link
                           href={`/admin/copy/${copy.id}`}
@@ -375,9 +433,13 @@ function SectionHeading({
 }) {
   return (
     <div>
-      <p className="text-xs font-bold uppercase tracking-[0.22em] text-zinc-500">{eyebrow}</p>
+      <p className="text-xs font-bold uppercase tracking-[0.22em] text-zinc-500">
+        {eyebrow}
+      </p>
       <h2 className="mt-1 text-2xl font-bold">{title}</h2>
-      {description && <p className="mt-1 text-sm text-zinc-400">{description}</p>}
+      {description && (
+        <p className="mt-1 text-sm text-zinc-400">{description}</p>
+      )}
     </div>
   );
 }
@@ -385,13 +447,21 @@ function SectionHeading({
 function InfoCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+        {label}
+      </p>
       <div className="mt-2 text-lg font-bold text-zinc-100">{value}</div>
     </div>
   );
 }
 
-function RatingBar({ label, rating }: { label: string; rating: number | null | undefined }) {
+function RatingBar({
+  label,
+  rating,
+}: {
+  label: string;
+  rating: number | null | undefined;
+}) {
   const normalized = rating == null ? 0 : Math.max(0, Math.min(10, rating));
   const percentage = normalized * 10;
 
@@ -401,14 +471,18 @@ function RatingBar({ label, rating }: { label: string; rating: number | null | u
         <p className="font-semibold text-zinc-200">{label}</p>
         <p className="text-2xl font-black">{rating == null ? "N/A" : rating}</p>
       </div>
-      <div className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800" aria-label={`${label}: ${rating ?? "not rated"} out of 10`}>
+      <div
+        className="mt-4 h-3 overflow-hidden rounded-full bg-zinc-800"
+        aria-label={`${label}: ${rating ?? "not rated"} out of 10`}
+      >
         <div
           className="h-full rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500 transition-all"
           style={{ width: `${percentage}%` }}
         />
       </div>
       <div className="mt-2 flex justify-between text-[10px] text-zinc-600">
-        <span>0</span><span>10</span>
+        <span>0</span>
+        <span>10</span>
       </div>
     </div>
   );
@@ -424,13 +498,21 @@ function SummaryCard({
   positive?: boolean;
 }) {
   return (
-    <div className={`rounded-2xl border p-5 ${positive ? "border-emerald-500/25 bg-emerald-500/5" : "border-rose-500/25 bg-rose-500/5"}`}>
-      <h3 className={`text-lg font-bold ${positive ? "text-emerald-300" : "text-rose-300"}`}>{title}</h3>
+    <div
+      className={`rounded-2xl border p-5 ${positive ? "border-emerald-500/25 bg-emerald-500/5" : "border-rose-500/25 bg-rose-500/5"}`}
+    >
+      <h3
+        className={`text-lg font-bold ${positive ? "text-emerald-300" : "text-rose-300"}`}
+      >
+        {title}
+      </h3>
       {items.length > 0 ? (
         <ul className="mt-4 space-y-3">
           {items.map((item) => (
             <li key={item.label} className="flex gap-3">
-              <span className={positive ? "text-emerald-400" : "text-rose-400"}>{positive ? "+" : "−"}</span>
+              <span className={positive ? "text-emerald-400" : "text-rose-400"}>
+                {positive ? "+" : "−"}
+              </span>
               <div>
                 <p className="font-semibold text-zinc-200">{item.label}</p>
                 <p className="text-sm text-zinc-400">{item.detail}</p>
@@ -439,7 +521,9 @@ function SummaryCard({
           ))}
         </ul>
       ) : (
-        <p className="mt-3 text-sm text-zinc-500">Nothing strongly stands out in this category yet.</p>
+        <p className="mt-3 text-sm text-zinc-500">
+          Nothing strongly stands out in this category yet.
+        </p>
       )}
     </div>
   );
@@ -482,12 +566,22 @@ function buildReviewSummary(review: ReviewRecord | undefined) {
 }
 
 function strengthDescription(label: string, rating: number) {
-  const adjective = rating >= 9.5 ? "Exceptional" : rating >= 9 ? "Outstanding" : "A major strength";
+  const adjective =
+    rating >= 9.5
+      ? "Exceptional"
+      : rating >= 9
+        ? "Outstanding"
+        : "A major strength";
   return `${adjective} ${label.toLowerCase()} (${rating}/10).`;
 }
 
 function weaknessDescription(label: string, rating: number) {
-  const adjective = rating <= 2 ? "A serious weakness" : rating <= 4 ? "A notable weakness" : "The weakest part of the experience";
+  const adjective =
+    rating <= 2
+      ? "A serious weakness"
+      : rating <= 4
+        ? "A notable weakness"
+        : "The weakest part of the experience";
   return `${adjective} in ${label.toLowerCase()} (${rating}/10).`;
 }
 
@@ -499,33 +593,52 @@ function buildPersonalRankings(
 ) {
   const scoredGames = games
     .map((game) => ({ game, rating: getLatestOverallRating(game.userGames) }))
-    .filter((entry): entry is { game: RankedGame; rating: number } => entry.rating != null)
-    .sort((a, b) => b.rating - a.rating || a.game.title.localeCompare(b.game.title));
+    .filter(
+      (entry): entry is { game: RankedGame; rating: number } =>
+        entry.rating != null,
+    )
+    .sort(
+      (a, b) => b.rating - a.rating || a.game.title.localeCompare(b.game.title),
+    );
 
-  const currentIndex = scoredGames.findIndex((entry) => entry.game.id === currentGameId);
+  const currentIndex = scoredGames.findIndex(
+    (entry) => entry.game.id === currentGameId,
+  );
   const badges: string[] = [];
 
   if (currentIndex >= 0 && currentIndex < 10) {
     badges.push(`#${currentIndex + 1} Overall`);
   }
 
-  const currentRating = scoredGames.find((entry) => entry.game.id === currentGameId)?.rating;
+  const currentRating = scoredGames.find(
+    (entry) => entry.game.id === currentGameId,
+  )?.rating;
   if (currentRating == null) return badges;
 
   for (const genreName of currentGenres) {
     const genreRatings = scoredGames
-      .filter(({ game }) => game.gameGenres.some((entry) => entry.genre.name === genreName))
+      .filter(({ game }) =>
+        game.gameGenres.some((entry) => entry.genre.name === genreName),
+      )
       .map((entry) => entry.rating);
-    if (genreRatings.length > 0 && currentRating === Math.max(...genreRatings)) {
+    if (
+      genreRatings.length > 0 &&
+      currentRating === Math.max(...genreRatings)
+    ) {
       badges.push(`Top ${genreName} Game`);
     }
   }
 
   for (const platformName of [...new Set(currentPlatforms)]) {
     const platformRatings = scoredGames
-      .filter(({ game }) => game.userGames.some((copy) => copy.platform?.name === platformName))
+      .filter(({ game }) =>
+        game.userGames.some((copy) => copy.platform?.name === platformName),
+      )
       .map((entry) => entry.rating);
-    if (platformRatings.length > 0 && currentRating === Math.max(...platformRatings)) {
+    if (
+      platformRatings.length > 0 &&
+      currentRating === Math.max(...platformRatings)
+    ) {
       badges.push(`Top ${platformName} Game`);
     }
   }
@@ -540,11 +653,18 @@ function getLatestOverallRating(userGames: UserGameRecord[]) {
   return ratings.length > 0 ? Math.max(...ratings) : null;
 }
 
-function calculateCompletionPercentage(userGame: UserGameRecord | undefined, hltbMain: number | null) {
+function calculateCompletionPercentage(
+  userGame: UserGameRecord | undefined,
+  hltbMain: number | null,
+) {
   if (!userGame) return null;
   if (userGame.status === "COMPLETED") return 100;
-  if (userGame.hoursPlayed == null || hltbMain == null || hltbMain <= 0) return null;
-  return Math.min(100, Math.max(0, Math.round((userGame.hoursPlayed / hltbMain) * 100)));
+  if (userGame.hoursPlayed == null || hltbMain == null || hltbMain <= 0)
+    return null;
+  return Math.min(
+    100,
+    Math.max(0, Math.round((userGame.hoursPlayed / hltbMain) * 100)),
+  );
 }
 
 function buildSimilarGames(
@@ -559,24 +679,44 @@ function buildSimilarGames(
 ): SimilarGameResult[] {
   const currentGenreIds = new Set(genreIds);
   const currentPlatformIds = new Set(
-    currentGame.userGames.map((copy) => copy.platformId).filter((id): id is number => id != null),
+    currentGame.userGames
+      .map((copy) => copy.platformId)
+      .filter((id): id is number => id != null),
   );
   const currentReleaseYear = currentGame.releaseDate?.getFullYear() ?? null;
 
   return candidates
     .map((candidate) => {
       const candidateRating = getLatestOverallRating(candidate.userGames);
-      const candidateGenreIds = candidate.gameGenres.map((entry) => entry.genreId);
-      const sharedGenreCount = candidateGenreIds.filter((id) => currentGenreIds.has(id)).length;
+      const candidateGenreIds = candidate.gameGenres.map(
+        (entry) => entry.genreId,
+      );
+      const sharedGenreCount = candidateGenreIds.filter((id) =>
+        currentGenreIds.has(id),
+      ).length;
       const reasons: string[] = [];
-      let score = genreIds.length > 0 ? Math.round((sharedGenreCount / genreIds.length) * 40) : 0;
+      let score =
+        genreIds.length > 0
+          ? Math.round((sharedGenreCount / genreIds.length) * 40)
+          : 0;
 
-      if (sharedGenreCount > 0) reasons.push(`${sharedGenreCount} shared genre${sharedGenreCount === 1 ? "" : "s"}`);
-      if (currentGame.franchiseId && candidate.franchiseId === currentGame.franchiseId) {
+      if (sharedGenreCount > 0)
+        reasons.push(
+          `${sharedGenreCount} shared genre${sharedGenreCount === 1 ? "" : "s"}`,
+        );
+      if (
+        currentGame.franchiseId &&
+        candidate.franchiseId === currentGame.franchiseId
+      ) {
         score += 30;
         reasons.push("Same franchise");
       }
-      if (candidate.userGames.some((copy) => copy.platformId != null && currentPlatformIds.has(copy.platformId))) {
+      if (
+        candidate.userGames.some(
+          (copy) =>
+            copy.platformId != null && currentPlatformIds.has(copy.platformId),
+        )
+      ) {
         score += 15;
         reasons.push("Same platform");
       }
@@ -586,15 +726,24 @@ function buildSimilarGames(
         if (difference <= 1) reasons.push("Similar rating");
       }
       if (currentReleaseYear && candidate.releaseDate) {
-        const difference = Math.abs(currentReleaseYear - candidate.releaseDate.getFullYear());
+        const difference = Math.abs(
+          currentReleaseYear - candidate.releaseDate.getFullYear(),
+        );
         if (difference <= 2) score += 5;
         else if (difference <= 5) score += 3;
       }
 
-      return { ...candidate, similarityScore: score, similarityReasons: reasons };
+      return {
+        ...candidate,
+        similarityScore: score,
+        similarityReasons: reasons,
+      };
     })
     .filter((candidate) => candidate.similarityScore >= 20)
-    .sort((a, b) => b.similarityScore - a.similarityScore || a.title.localeCompare(b.title))
+    .sort(
+      (a, b) =>
+        b.similarityScore - a.similarityScore || a.title.localeCompare(b.title),
+    )
     .slice(0, 6);
 }
 
@@ -613,7 +762,10 @@ function formatStatus(status: string | undefined) {
 
 function formatCalendarDate(date: Date | string | null | undefined) {
   if (!date) return "N/A";
-  const value = typeof date === "string" ? date.slice(0, 10) : date.toISOString().slice(0, 10);
+  const value =
+    typeof date === "string"
+      ? date.slice(0, 10)
+      : date.toISOString().slice(0, 10);
   const [year, month, day] = value.split("-").map(Number);
   return new Intl.DateTimeFormat("en-CA", {
     year: "numeric",

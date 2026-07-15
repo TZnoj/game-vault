@@ -6,74 +6,65 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Keep the batch small enough for Vercel's function-duration limits.
-// The oldest incomplete games are selected first, so repeated runs eventually
-// work through the full library.
 const GAMES_PER_RUN = 12;
-
-type BeforeAfterSnapshot = {
-  coverArtUrl: string | null;
-  metacriticScore: number | null;
-  hltbMain: number | null;
-  hltbMainExtra: number | null;
-  hltbCompletionist: number | null;
-  releaseDate: Date | null;
-};
+const SUCCESS_COOLDOWN_DAYS = 30;
+const FAILED_COOLDOWN_HOURS = 24;
 
 export async function GET(request: Request) {
+  const startedAt = new Date();
   const cronSecret = process.env.CRON_SECRET;
 
   if (!cronSecret) {
-    console.error("CRON_SECRET is not configured in Vercel.");
+    console.error("[nightly-enrich] CRON_SECRET is not configured");
     return NextResponse.json(
-      { error: "Cron is not configured" },
+      { ok: false, error: "Cron is not configured" },
       { status: 500 },
     );
   }
 
-  const authHeader = request.headers.get("authorization");
-
-  if (authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (request.headers.get("authorization") !== `Bearer ${cronSecret}`) {
+    console.warn("[nightly-enrich] Rejected unauthorized request");
+    return NextResponse.json(
+      { ok: false, error: "Unauthorized" },
+      { status: 401 },
+    );
   }
 
   const run = await prisma.enrichmentRun.create({
     data: {
       source: "vercel-cron",
-      startedAt: new Date(),
+      startedAt,
     },
   });
 
+  console.log(
+    `[nightly-enrich] Run #${run.id} started at ${startedAt.toISOString()}`,
+  );
+
   let gamesUpdated = 0;
   let gamesFailed = 0;
+  let gamesChecked = 0;
 
   try {
     const now = new Date();
     const successfulCheckCutoff = new Date(
-      now.getTime() - 30 * 24 * 60 * 60 * 1000,
+      now.getTime() - SUCCESS_COOLDOWN_DAYS * 24 * 60 * 60 * 1000,
     );
     const failedCheckCutoff = new Date(
-      now.getTime() - 24 * 60 * 60 * 1000,
+      now.getTime() - FAILED_COOLDOWN_HOURS * 60 * 60 * 1000,
     );
 
-    // Do not order by Game.updatedAt here. A successful enrichment check that
-    // finds no changes does not update the Game row, which caused the same
-    // oldest games to be selected on every cron run.
-    //
-    // Instead, load the latest enrichment log for each incomplete game and
-    // choose games that have never been checked or whose cooldown has expired.
+    // Rotate through the complete library, not only games missing metadata.
+    // Never-checked games are selected first. Afterwards, completed checks
+    // wait 30 days and failures can retry after 24 hours.
     const candidates = await prisma.game.findMany({
-      where: {
-        OR: [
-          { coverArtUrl: null },
-          { metacriticScore: null },
-          { hltbMain: null },
-          { releaseDate: null },
-        ],
-      },
       select: {
         id: true,
         title: true,
+        coverArtUrl: true,
+        metacriticScore: true,
+        hltbMain: true,
+        releaseDate: true,
         enrichmentLogs: {
           orderBy: { createdAt: "desc" },
           take: 1,
@@ -85,19 +76,29 @@ export async function GET(request: Request) {
       },
     });
 
-    const games = candidates
-      .filter((game) => {
-        const latestLog = game.enrichmentLogs[0];
+    const eligible = candidates.filter((game) => {
+      const latestLog = game.enrichmentLogs[0];
+      if (!latestLog) return true;
 
-        if (!latestLog) return true;
+      if (latestLog.status === "failed") {
+        return latestLog.createdAt <= failedCheckCutoff;
+      }
 
-        if (latestLog.status === "failed") {
-          return latestLog.createdAt <= failedCheckCutoff;
-        }
+      return latestLog.createdAt <= successfulCheckCutoff;
+    });
 
-        return latestLog.createdAt <= successfulCheckCutoff;
-      })
+    const games = eligible
       .sort((a, b) => {
+        const aNeverChecked = a.enrichmentLogs.length === 0;
+        const bNeverChecked = b.enrichmentLogs.length === 0;
+
+        if (aNeverChecked !== bNeverChecked) return aNeverChecked ? -1 : 1;
+
+        const aMissing = countMissingMetadata(a);
+        const bMissing = countMissingMetadata(b);
+
+        if (aMissing !== bMissing) return bMissing - aMissing;
+
         const aCheckedAt = a.enrichmentLogs[0]?.createdAt.getTime() ?? 0;
         const bCheckedAt = b.enrichmentLogs[0]?.createdAt.getTime() ?? 0;
 
@@ -106,6 +107,16 @@ export async function GET(request: Request) {
       })
       .slice(0, GAMES_PER_RUN)
       .map(({ id, title }) => ({ id, title }));
+
+    console.log(
+      `[nightly-enrich] ${candidates.length} total games, ${eligible.length} eligible, ${games.length} selected`,
+    );
+
+    if (games.length > 0) {
+      console.log(
+        `[nightly-enrich] Selected: ${games.map((game) => `${game.id}:${game.title}`).join(" | ")}`,
+      );
+    }
 
     const results: {
       id: number;
@@ -116,13 +127,12 @@ export async function GET(request: Request) {
     }[] = [];
 
     for (const game of games) {
-      try {
-        const before = await getSnapshot(game.id);
-        await enrichSingleGame(game.id);
-        const after = await getSnapshot(game.id);
+      gamesChecked += 1;
 
-        const changedFields = getChangedFields(before, after);
-        const status = changedFields.length > 0 ? "updated" : "checked";
+      try {
+        const result = await enrichSingleGame(game.id);
+        const status = result?.updated ? "updated" : "checked";
+        const changedFields = result?.changedFields ?? [];
 
         if (status === "updated") gamesUpdated += 1;
 
@@ -136,6 +146,12 @@ export async function GET(request: Request) {
           },
         });
 
+        console.log(
+          status === "updated"
+            ? `[nightly-enrich] Updated ${game.id}:${game.title} (${changedFields.join(", ")})`
+            : `[nightly-enrich] Checked ${game.id}:${game.title} — no changes`,
+        );
+
         results.push({
           id: game.id,
           title: game.title,
@@ -145,7 +161,7 @@ export async function GET(request: Request) {
       } catch (error) {
         gamesFailed += 1;
         const message =
-          error instanceof Error ? error.message : "Unknown error";
+          error instanceof Error ? error.message : "Unknown enrichment error";
 
         await prisma.enrichmentLog.create({
           data: {
@@ -158,6 +174,10 @@ export async function GET(request: Request) {
           },
         });
 
+        console.error(
+          `[nightly-enrich] Failed ${game.id}:${game.title}: ${message}`,
+        );
+
         results.push({
           id: game.id,
           title: game.title,
@@ -168,37 +188,46 @@ export async function GET(request: Request) {
       }
     }
 
+    const finishedAt = new Date();
+
     await prisma.enrichmentRun.update({
       where: { id: run.id },
       data: {
-        finishedAt: new Date(),
-        gamesChecked: games.length,
+        finishedAt,
+        gamesChecked,
         gamesUpdated,
         gamesFailed,
       },
     });
 
-    return NextResponse.json({
+    const summary = {
       ok: true,
       runId: run.id,
-      checked: games.length,
+      checked: gamesChecked,
       updated: gamesUpdated,
       failed: gamesFailed,
+      durationMs: finishedAt.getTime() - startedAt.getTime(),
       results,
-    });
+    };
+
+    console.log(`[nightly-enrich] Run #${run.id} finished`, summary);
+    return NextResponse.json(summary);
   } catch (error) {
+    const finishedAt = new Date();
     const message = error instanceof Error ? error.message : "Unknown error";
 
     await prisma.enrichmentRun.update({
       where: { id: run.id },
       data: {
-        finishedAt: new Date(),
+        finishedAt,
+        gamesChecked,
         gamesUpdated,
         gamesFailed: gamesFailed + 1,
       },
     });
 
-    console.error("Nightly enrichment failed", error);
+    console.error(`[nightly-enrich] Run #${run.id} failed: ${message}`, error);
+
     return NextResponse.json(
       { ok: false, runId: run.id, error: message },
       { status: 500 },
@@ -206,46 +235,16 @@ export async function GET(request: Request) {
   }
 }
 
-async function getSnapshot(gameId: number): Promise<BeforeAfterSnapshot> {
-  const game = await prisma.game.findUnique({
-    where: { id: gameId },
-    select: {
-      coverArtUrl: true,
-      metacriticScore: true,
-      hltbMain: true,
-      hltbMainExtra: true,
-      hltbCompletionist: true,
-      releaseDate: true,
-    },
-  });
-
-  if (!game) throw new Error(`Game ${gameId} not found`);
-  return game;
-}
-
-function getChangedFields(
-  before: BeforeAfterSnapshot,
-  after: BeforeAfterSnapshot,
-) {
-  const changedFields: string[] = [];
-
-  if (before.coverArtUrl !== after.coverArtUrl)
-    changedFields.push("coverArtUrl");
-  if (before.metacriticScore !== after.metacriticScore) {
-    changedFields.push("metacriticScore");
-  }
-  if (before.hltbMain !== after.hltbMain) changedFields.push("hltbMain");
-  if (before.hltbMainExtra !== after.hltbMainExtra) {
-    changedFields.push("hltbMainExtra");
-  }
-  if (before.hltbCompletionist !== after.hltbCompletionist) {
-    changedFields.push("hltbCompletionist");
-  }
-
-  const beforeRelease = before.releaseDate?.toISOString() ?? null;
-  const afterRelease = after.releaseDate?.toISOString() ?? null;
-
-  if (beforeRelease !== afterRelease) changedFields.push("releaseDate");
-
-  return changedFields;
+function countMissingMetadata(game: {
+  coverArtUrl: string | null;
+  metacriticScore: number | null;
+  hltbMain: number | null;
+  releaseDate: Date | null;
+}) {
+  return [
+    game.coverArtUrl,
+    game.metacriticScore,
+    game.hltbMain,
+    game.releaseDate,
+  ].filter((value) => value == null).length;
 }

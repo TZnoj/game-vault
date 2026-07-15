@@ -25,6 +25,11 @@ type IgdbGame = {
   };
 };
 
+export type EnrichmentResult = {
+  updated: boolean;
+  changedFields: string[];
+};
+
 function normalizeTitle(title: string) {
   return title
     .replace(/\bFF7\b/i, "Final Fantasy VII")
@@ -32,7 +37,10 @@ function normalizeTitle(title: string) {
     .replace(/\bFF16\b/i, "Final Fantasy XVI")
     .replace(/\bP5:Royal\b/i, "Persona 5 Royal")
     .replace(/\bPersona 5:Royal\b/i, "Persona 5 Royal")
-    .replace(/\bShin Megami Tensei 5:Vengeance\b/i, "Shin Megami Tensei V: Vengeance")
+    .replace(
+      /\bShin Megami Tensei 5:Vengeance\b/i,
+      "Shin Megami Tensei V: Vengeance",
+    )
     .replace(/\bSMT 5:Vengeance\b/i, "Shin Megami Tensei V: Vengeance")
     .replace(/Claire Obscur/i, "Clair Obscur")
     .replace(/Metaphor Refantazio/i, "Metaphor: ReFantazio")
@@ -139,7 +147,10 @@ function hltbHours(value: unknown): number | null {
   }
 
   if (typeof value === "string") {
-    const normalized = value.replace("½", ".5").replace(/[^\d.]/g, "").trim();
+    const normalized = value
+      .replace("½", ".5")
+      .replace(/[^\d.]/g, "")
+      .trim();
     const number = Number(normalized);
     return Number.isFinite(number) ? number : null;
   }
@@ -157,7 +168,10 @@ async function getSafeRawgId(rawgId: number, currentGameId: number) {
   return rawgId;
 }
 
-async function getSafeSlug(slug: string | null | undefined, currentGameId: number) {
+async function getSafeSlug(
+  slug: string | null | undefined,
+  currentGameId: number,
+) {
   if (!slug) return null;
 
   const existing = await prisma.game.findUnique({
@@ -177,7 +191,7 @@ export async function enrichSingleGame(gameId: number) {
     },
   });
 
-  if (!game) return;
+  if (!game) throw new Error(`Game ${gameId} not found`);
 
   const override = game.metadataOverride;
 
@@ -223,70 +237,99 @@ export async function enrichSingleGame(gameId: number) {
   const safeCoverArtUrl =
     override?.coverArtUrl ??
     (shouldUpdateCoverArt
-      ? game.coverArtUrl ?? igdbCoverUrl ?? null
+      ? (game.coverArtUrl ?? igdbCoverUrl ?? null)
       : game.coverArtUrl);
 
   const safeMetacriticScore =
-  manualMetacritic ??
-  (shouldUpdateMetacritic
-    ? (
-        game.metacriticScore == null ||
-        game.metacriticScore === -1
-      )
-        ? rawgData?.metacritic ?? game.metacriticScore
+    manualMetacritic ??
+    (shouldUpdateMetacritic
+      ? game.metacriticScore == null || game.metacriticScore === -1
+        ? (rawgData?.metacritic ?? game.metacriticScore)
         : game.metacriticScore
-    : game.metacriticScore);
+      : game.metacriticScore);
 
   const safeReleaseDate =
     manualReleaseDate ??
     (shouldUpdateReleaseDate
-      ? game.releaseDate ??
-        (rawgData?.released ? new Date(rawgData.released) : null)
+      ? (game.releaseDate ??
+        (rawgData?.released ? new Date(rawgData.released) : null))
       : game.releaseDate);
 
-  const safeHltbMain =
-    shouldUpdateHLTB
-      ? game.hltbMain ??
-        hltbHours((hltbData as any)?.gameplayMain) ??
-        hltbHours((hltbData as any)?.gameplay_main) ??
-        hltbHours((hltbData as any)?.mainStory) ??
-        hltbHours((hltbData as any)?.main_story) ??
-        hltbHours((hltbData as any)?.compMain) ??
-        null
-      : game.hltbMain;
+  const safeHltbMain = shouldUpdateHLTB
+    ? (game.hltbMain ??
+      hltbHours((hltbData as any)?.gameplayMain) ??
+      hltbHours((hltbData as any)?.gameplay_main) ??
+      hltbHours((hltbData as any)?.mainStory) ??
+      hltbHours((hltbData as any)?.main_story) ??
+      hltbHours((hltbData as any)?.compMain) ??
+      null)
+    : game.hltbMain;
 
-  const safeHltbMainExtra =
-    shouldUpdateHLTB
-      ? game.hltbMainExtra ??
-        hltbHours((hltbData as any)?.gameplayMainExtra) ??
-        hltbHours((hltbData as any)?.gameplay_main_extra) ??
-        hltbHours((hltbData as any)?.mainExtra) ??
-        hltbHours((hltbData as any)?.main_extra) ??
-        hltbHours((hltbData as any)?.compPlus) ??
-        null
-      : game.hltbMainExtra;
+  const safeHltbMainExtra = shouldUpdateHLTB
+    ? (game.hltbMainExtra ??
+      hltbHours((hltbData as any)?.gameplayMainExtra) ??
+      hltbHours((hltbData as any)?.gameplay_main_extra) ??
+      hltbHours((hltbData as any)?.mainExtra) ??
+      hltbHours((hltbData as any)?.main_extra) ??
+      hltbHours((hltbData as any)?.compPlus) ??
+      null)
+    : game.hltbMainExtra;
 
-  const safeHltbCompletionist =
-    shouldUpdateHLTB
-      ? game.hltbCompletionist ??
-        hltbHours((hltbData as any)?.gameplayCompletionist) ??
-        hltbHours((hltbData as any)?.gameplay_completionist) ??
-        hltbHours((hltbData as any)?.completionist) ??
-        hltbHours((hltbData as any)?.comp100) ??
-        null
-      : game.hltbCompletionist;
+  const safeHltbCompletionist = shouldUpdateHLTB
+    ? (game.hltbCompletionist ??
+      hltbHours((hltbData as any)?.gameplayCompletionist) ??
+      hltbHours((hltbData as any)?.gameplay_completionist) ??
+      hltbHours((hltbData as any)?.completionist) ??
+      hltbHours((hltbData as any)?.comp100) ??
+      null)
+    : game.hltbCompletionist;
+
+  const proposed = {
+    rawgId,
+    slug,
+    releaseDate: safeReleaseDate,
+    metacriticScore: safeMetacriticScore,
+    coverArtUrl: safeCoverArtUrl,
+    hltbMain: safeHltbMain,
+    hltbMainExtra: safeHltbMainExtra,
+    hltbCompletionist: safeHltbCompletionist,
+  };
+
+  const changedFields: string[] = [];
+
+  if (game.rawgId !== proposed.rawgId) changedFields.push("rawgId");
+  if (game.slug !== proposed.slug) changedFields.push("slug");
+  if (game.coverArtUrl !== proposed.coverArtUrl) {
+    changedFields.push("coverArtUrl");
+  }
+  if (game.metacriticScore !== proposed.metacriticScore) {
+    changedFields.push("metacriticScore");
+  }
+  if (game.hltbMain !== proposed.hltbMain) changedFields.push("hltbMain");
+  if (game.hltbMainExtra !== proposed.hltbMainExtra) {
+    changedFields.push("hltbMainExtra");
+  }
+  if (game.hltbCompletionist !== proposed.hltbCompletionist) {
+    changedFields.push("hltbCompletionist");
+  }
+
+  const currentReleaseDate = game.releaseDate?.toISOString() ?? null;
+  const proposedReleaseDate = proposed.releaseDate?.toISOString() ?? null;
+
+  if (currentReleaseDate !== proposedReleaseDate) {
+    changedFields.push("releaseDate");
+  }
+
+  // prisma.game.update() advances Game.updatedAt even when all supplied values
+  // are identical. Skip the write entirely when no metadata actually changed.
+  if (changedFields.length === 0) {
+    return { updated: false, changedFields } satisfies EnrichmentResult;
+  }
 
   await prisma.game.update({
     where: { id: game.id },
-    data: {
-      rawgId,
-      slug,
-      releaseDate: safeReleaseDate,
-      metacriticScore: safeMetacriticScore,
-      coverArtUrl: safeCoverArtUrl,
-      hltbMain: safeHltbMain,
-      hltbMainExtra: safeHltbMainExtra,
-      hltbCompletionist: safeHltbCompletionist,
-    },
+    data: proposed,
   });
+
+  return { updated: true, changedFields } satisfies EnrichmentResult;
 }

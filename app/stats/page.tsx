@@ -1,628 +1,414 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import {
-  CompletedByMonthChart,
-  GenreBreakdownChart,
-  RatingsDistributionChart,
-} from "@/components/StatsCharts";
-import { RatingBadge } from "@/components/RatingBadge";
 
-type StatsUserGame = {
+export const dynamic = "force-dynamic";
+
+type DashboardGame = {
   id: number;
   status: string;
-  hoursPlayed: number | null;
+  dateStarted: Date | null;
   dateCompleted: Date | null;
-  platformId: number | null;
-  platform: {
-    id: number;
-    name: string;
-  } | null;
+  hoursPlayed: number | null;
+  platform: { id: number; name: string } | null;
   game: {
     id: number;
     title: string;
-    hltbMain: number | null;
     isEndless: boolean;
-    franchise: {
-      id: number;
-      name: string;
-    } | null;
-    gameGenres: {
-      genre: {
-        name: string;
-      };
-    }[];
+    franchise: { id: number; name: string } | null;
+    gameGenres: { genre: { id: number; name: string } }[];
   };
   reviews: {
     overallRating: number | null;
+    gameplayRating: number | null;
+    storyRating: number | null;
+    musicRating: number | null;
+    artRating: number | null;
   }[];
 };
 
+type Aggregate = {
+  games: number;
+  completed: number;
+  hours: number;
+  ratings: number[];
+};
+
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+function average(values: number[]) {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function median(values: number[]) {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
+
+function formatNumber(value: number | null, digits = 1) {
+  return value == null ? "N/A" : value.toFixed(digits);
+}
+
+function completionPercent(stats: Aggregate) {
+  return stats.games > 0 ? (stats.completed / stats.games) * 100 : 0;
+}
 
 export default async function StatsPage() {
-const userGames = (await prisma.userGame.findMany({
-  include: {
-    platform: true,
-    game: {
-      include: {
-        franchise: true,
-        gameGenres: {
-          include: {
-            genre: true,
+  const userGames = (await prisma.userGame.findMany({
+    include: {
+      platform: true,
+      game: {
+        include: {
+          franchise: true,
+          gameGenres: {
+            include: { genre: true },
           },
         },
       },
-    },
-    reviews: {
-      orderBy: {
-        reviewDate: "desc",
+      reviews: {
+        orderBy: [{ reviewDate: "desc" }, { id: "desc" }],
+        take: 1,
       },
     },
-  },
-})) as StatsUserGame[];
+  })) as DashboardGame[];
 
-  const completionEligibleGames = userGames.filter(
-  (userGame: StatsUserGame) => !userGame.game.isEndless,
-);
-
-const completedGames = completionEligibleGames.filter(
-  (game: StatsUserGame) => game.status === "COMPLETED",
-);
-
-const inProgressGames = userGames.filter(
-  (game: StatsUserGame) => game.status === "PLAYING",
-);
-
-const backlogGames = completionEligibleGames.filter(
-  (game: StatsUserGame) => game.status === "BACKLOG",
-);
-
-const onHoldGames = userGames.filter(
-  (game: StatsUserGame) => game.status === "ONHOLD",
-);
-
-  const totalHoursPlayed = completedGames.reduce(
-    (sum: number, game: StatsUserGame) => sum + (game.hoursPlayed ?? 0),
-    0,
+  const completed = userGames.filter((entry) => entry.status === "COMPLETED");
+  const started = userGames.filter(
+    (entry) => entry.dateStarted != null || entry.status !== "BACKLOG",
   );
+  const dropped = userGames.filter((entry) => entry.status === "DROPPED");
+  const backlog = userGames.filter((entry) => entry.status === "BACKLOG");
+  const completionEligible = userGames.filter((entry) => !entry.game.isEndless);
+  const completionRate =
+    completionEligible.length > 0
+      ? (completed.filter((entry) => !entry.game.isEndless).length /
+          completionEligible.length) *
+        100
+      : 0;
 
-  const backlogHoursRemaining = backlogGames.reduce(
-  (sum: number, userGame: StatsUserGame) =>
-    sum + (userGame.game.hltbMain ?? userGame.hoursPlayed ?? 0),
-  0
-);
+  const ratings = userGames
+    .map((entry) => entry.reviews[0])
+    .filter((review): review is NonNullable<typeof review> => review != null);
 
-const completedGamesWithHours = completedGames.filter(
-  (userGame: StatsUserGame) => userGame.hoursPlayed != null
-);
+  const overallRatings = ratings
+    .map((review) => review.overallRating)
+    .filter((value): value is number => value != null);
+  const gameplayRatings = ratings
+    .map((review) => review.gameplayRating)
+    .filter((value): value is number => value != null);
+  const storyRatings = ratings
+    .map((review) => review.storyRating)
+    .filter((value): value is number => value != null);
+  const musicRatings = ratings
+    .map((review) => review.musicRating)
+    .filter((value): value is number => value != null);
+  const artRatings = ratings
+    .map((review) => review.artRating)
+    .filter((value): value is number => value != null);
 
-const averageCompletionTime =
-  completedGamesWithHours.length > 0
-    ? completedGamesWithHours.reduce(
-        (sum: number, userGame: StatsUserGame) => sum + (userGame.hoursPlayed ?? 0),
-        0
-      ) / completedGamesWithHours.length
-    : null;
-
-const reviewsWritten = userGames.filter(
-  (userGame: StatsUserGame) => userGame.reviews.length > 0
-).length;
-
-const platformsPlayed = new Set(
-  userGames
-    .map((userGame: StatsUserGame) => userGame.platformId)
-    .filter((platformId): platformId is number => platformId != null)
-).size;
-
-  const allRatings = userGames
-    .map((game: StatsUserGame) => game.reviews[0]?.overallRating)
-    .filter(
-  (rating: number | null): rating is number =>
-    rating != null,
-);
-
-  const averageRating =
-    allRatings.length > 0
-      ? allRatings.reduce((sum, rating: number) => sum + rating, 0) / allRatings.length
-      : null;
-
-const completionRate =
-  completionEligibleGames.length > 0
-    ? (completedGames.length / completionEligibleGames.length) * 100
-    : 0;
-
-  const oneYearAgo = new Date();
-  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-
-  const topRatedGames = userGames
-    .filter((game: StatsUserGame) => {
-      const rating = game.reviews[0]?.overallRating;
-      const dateCompleted = game.dateCompleted
-        ? new Date(game.dateCompleted)
-        : null;
-
-      return (
-        rating != null && dateCompleted != null && dateCompleted >= oneYearAgo
-      );
-    })
+  const ratedGames = userGames
+    .filter((entry) => entry.reviews[0]?.overallRating != null)
     .sort(
-      (a: StatsUserGame, b: StatsUserGame) =>
-        (b.reviews[0]?.overallRating ?? 0) - (a.reviews[0]?.overallRating ?? 0),
-    )
-    .slice(0, 10);
+      (a, b) =>
+        (b.reviews[0]?.overallRating ?? 0) -
+        (a.reviews[0]?.overallRating ?? 0),
+    );
+  const highestRated = ratedGames[0] ?? null;
+  const lowestRated = ratedGames.at(-1) ?? null;
 
-  const completedByYear = new Map<number, number>();
+  const ratingDistribution = Array.from({ length: 10 }, (_, index) => {
+    const rating = 10 - index;
+    const count = overallRatings.filter((value) =>
+      rating === 10 ? value >= 10 : value >= rating && value < rating + 1,
+    ).length;
+    return { rating, count };
+  });
+  const maxRatingCount = Math.max(1, ...ratingDistribution.map((row) => row.count));
+
+  const completedHours = completed
+    .map((entry) => entry.hoursPlayed)
+    .filter((value): value is number => value != null && value >= 0);
+  const totalHours = completedHours.reduce((sum, value) => sum + value, 0);
+  const gamesWithHours = completed
+    .filter((entry) => entry.hoursPlayed != null)
+    .sort((a, b) => (b.hoursPlayed ?? 0) - (a.hoursPlayed ?? 0));
+  const longest = gamesWithHours[0] ?? null;
+  const shortest = gamesWithHours.at(-1) ?? null;
+
+  const hoursByMonth = Array.from({ length: 12 }, () => 0);
   const hoursByYear = new Map<number, number>();
-  const ratingsByYear = new Map<number, number[]>();
-
-  const genreCounts = new Map<string, number>();
-  const genreRatings = new Map<string, number[]>();
-
-  for (const userGame of userGames) {
-    if (userGame.status === "COMPLETED" && userGame.dateCompleted) {
-      const year = new Date(userGame.dateCompleted).getFullYear();
-
-      completedByYear.set(year, (completedByYear.get(year) ?? 0) + 1);
-      hoursByYear.set(
-        year,
-        (hoursByYear.get(year) ?? 0) + (userGame.hoursPlayed ?? 0),
-      );
-
-      const rating = userGame.reviews[0]?.overallRating;
-      if (rating != null) {
-        ratingsByYear.set(year, [...(ratingsByYear.get(year) ?? []), rating]);
-      }
-    }
-
-    if (userGame.status !== "BACKLOG") {
-      const rating = userGame.reviews[0]?.overallRating ?? null;
-
-      for (const gameGenre of userGame.game.gameGenres) {
-        const genre = gameGenre.genre.name;
-
-        genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + 1);
-
-        if (rating != null) {
-          genreRatings.set(genre, [...(genreRatings.get(genre) ?? []), rating]);
-        }
-      }
-    }
+  for (const entry of completed) {
+    if (!entry.dateCompleted || entry.hoursPlayed == null) continue;
+    const date = new Date(entry.dateCompleted);
+    hoursByMonth[date.getMonth()] += entry.hoursPlayed;
+    hoursByYear.set(
+      date.getFullYear(),
+      (hoursByYear.get(date.getFullYear()) ?? 0) + entry.hoursPlayed,
+    );
   }
+  const maxMonthlyHours = Math.max(1, ...hoursByMonth);
+  const yearRows = [...hoursByYear.entries()].sort((a, b) => b[0] - a[0]);
+  const maxYearHours = Math.max(1, ...yearRows.map(([, hours]) => hours));
 
-  const mostPlayedGenres = [...genreCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10);
+  const genreStats = new Map<string, Aggregate & { id: number }>();
+  const platformStats = new Map<string, Aggregate & { id: number }>();
+  const franchiseStats = new Map<string, Aggregate & { id: number }>();
 
-  const averageRatingByGenre = [...genreRatings.entries()]
-    .map(([genre, ratings]) => ({
-      genre,
-      average:
-        ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length,
-      count: ratings.length,
-    }))
-    .sort((a, b) => b.average - a.average);
-
-  const years = [
-    ...new Set([...completedByYear.keys(), ...hoursByYear.keys()]),
-  ].sort((a, b) => a - b);
-
-  const highestRatedGenre = averageRatingByGenre[0];
-  const mostPlayedGenre = mostPlayedGenres[0];
-
-  const franchiseStats = new Map<
-    string,
-    {
-      id: number;
-      games: number;
-      completed: number;
-      hours: number;
-      ratings: number[];
-    }
-  >();
-
-const isRealFranchise = (name: string) =>
-  name.toLowerCase() !== "standalone";
-
-  for (const userGame of userGames) {
-    const franchise = userGame.game.franchise;
-    if (!franchise) continue;
-
-    const current = franchiseStats.get(franchise.name) ?? {
-      id: franchise.id,
+  function addToAggregate(
+    map: Map<string, Aggregate & { id: number }>,
+    name: string,
+    id: number,
+    entry: DashboardGame,
+  ) {
+    const current = map.get(name) ?? {
+      id,
       games: 0,
       completed: 0,
       hours: 0,
       ratings: [],
     };
-
     current.games += 1;
-
-    if (userGame.status === "COMPLETED") {
+    if (entry.status === "COMPLETED") {
       current.completed += 1;
-      current.hours += userGame.hoursPlayed ?? 0;
+      current.hours += entry.hoursPlayed ?? 0;
     }
+    const rating = entry.reviews[0]?.overallRating;
+    if (rating != null) current.ratings.push(rating);
+    map.set(name, current);
+  }
 
-    const rating = userGame.reviews[0]?.overallRating;
-    if (rating != null) {
-      current.ratings.push(rating);
+  for (const entry of userGames) {
+    for (const relation of entry.game.gameGenres) {
+      addToAggregate(
+        genreStats,
+        relation.genre.name,
+        relation.genre.id,
+        entry,
+      );
     }
-
-    franchiseStats.set(franchise.name, current);
+    if (entry.platform) {
+      addToAggregate(
+        platformStats,
+        entry.platform.name,
+        entry.platform.id,
+        entry,
+      );
+    }
+    const franchise = entry.game.franchise;
+    if (franchise && franchise.name.toLowerCase() !== "standalone") {
+      addToAggregate(franchiseStats, franchise.name, franchise.id, entry);
+    }
   }
 
- const topFranchisesByGames = [...franchiseStats.entries()]
-  .filter(([name, stats]) => isRealFranchise(name) && stats.games > 0)
-  .sort((a, b) => b[1].games - a[1].games)
-  .slice(0, 10);
-
-const topFranchisesByHours = [...franchiseStats.entries()]
-  .filter(([name, stats]) => isRealFranchise(name) && stats.hours > 0)
-  .sort((a, b) => b[1].hours - a[1].hours)
-  .slice(0, 10);
-
-const highestRatedFranchises = [...franchiseStats.entries()]
-  .filter(([name]) => isRealFranchise(name))
-  .map(([name, stats]) => ({
-    name,
-    id: stats.id,
-    average:
-      stats.ratings.length > 0
-        ? stats.ratings.reduce((sum, rating) => sum + rating, 0) /
-          stats.ratings.length
-        : null,
-    count: stats.ratings.length,
-  }))
-  .filter((franchise) => franchise.average != null && franchise.count > 0)
-  .sort((a, b) => (b.average ?? 0) - (a.average ?? 0))
-  .slice(0, 10);
-
-const mostCompletedFranchises = [...franchiseStats.entries()]
-  .filter(([name, stats]) => isRealFranchise(name) && stats.completed > 0)
-  .sort((a, b) => b[1].completed - a[1].completed)
-  .slice(0, 10);
-
-  const ratingDistribution = new Map<number, number>();
-
-  for (const rating of allRatings) {
-    const rounded = Math.floor(rating);
-    ratingDistribution.set(rounded, (ratingDistribution.get(rounded) ?? 0) + 1);
-  }
-
-const platformStats = new Map<
-  string,
-  {
-    id: number;
-    games: number;
-    completed: number;
-    hours: number;
-    ratings: number[];
-  }
->();
-
-for (const userGame of userGames) {
-  const platform = userGame.platform;
-  if (!platform) continue;
-
-  const current = platformStats.get(platform.name) ?? {
-    id: platform.id,
-    games: 0,
-    completed: 0,
-    hours: 0,
-    ratings: [],
-  };
-
-  current.games += 1;
-
-  if (userGame.status === "COMPLETED") {
-    current.completed += 1;
-    current.hours += userGame.hoursPlayed ?? 0;
-  }
-
-  const rating = userGame.reviews[0]?.overallRating;
-  if (rating != null) {
-    current.ratings.push(rating);
-  }
-
-  platformStats.set(platform.name, current);
-}
-
-const topPlatformsByGames = [...platformStats.entries()]
-  .filter(([, stats]) => stats.games > 0)
-  .sort((a, b) => b[1].games - a[1].games)
-  .slice(0, 10);
-
-const highestRatedPlatforms = [...platformStats.entries()]
-  .map(([name, stats]) => ({
-    name,
-    id: stats.id,
-    average:
-      stats.ratings.length > 0
-        ? stats.ratings.reduce((sum, rating) => sum + rating, 0) /
-          stats.ratings.length
-        : null,
-    count: stats.ratings.length,
-  }))
-  .filter((platform) => platform.average != null && platform.count > 0)
-  .sort((a, b) => (b.average ?? 0) - (a.average ?? 0))
-  .slice(0, 10);
-
-const mostCompletedPlatforms = [...platformStats.entries()]
-  .filter(([, stats]) => stats.completed > 0)
-  .sort((a, b) => b[1].completed - a[1].completed)
-  .slice(0, 10);
-
-  const ratingRows = [...ratingDistribution.entries()]
-    .sort((a, b) => b[0] - a[0])
-    .map(([rating, count]) => ({
-      rating: String(rating),
-      count,
-    }));
-
-  const completedByMonth = new Map<string, number>();
-
-  for (const userGame of completedGames) {
-    if (!userGame.dateCompleted) continue;
-
-    const date = new Date(userGame.dateCompleted);
-    const month = date.toLocaleDateString("en-CA", {
-      month: "short",
-    });
-
-    completedByMonth.set(month, (completedByMonth.get(month) ?? 0) + 1);
-  }
-
-  const monthOrder = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
-
-  const completedMonthRows = monthOrder
-    .map((month) => ({
-      month,
-      count: completedByMonth.get(month) ?? 0,
-    }))
-    .filter((row) => row.count > 0);
-
-  const totalGenreCount = mostPlayedGenres.reduce(
-    (sum, [, count]) => sum + count,
-    0,
+  const genres = [...genreStats.entries()].sort(
+    (a, b) => b[1].games - a[1].games || a[0].localeCompare(b[0]),
+  );
+  const platforms = [...platformStats.entries()].sort(
+    (a, b) => b[1].games - a[1].games || a[0].localeCompare(b[0]),
+  );
+  const franchises = [...franchiseStats.entries()].sort(
+    (a, b) => b[1].games - a[1].games || a[0].localeCompare(b[0]),
   );
 
-  const genreBreakdownRows = mostPlayedGenres.map(([genre, count]) => ({
-    genre,
-    count,
-    percentage: totalGenreCount > 0 ? (count / totalGenreCount) * 100 : 0,
-  }));
+  const highestRatedGenre = [...genres]
+    .filter(([, stats]) => stats.ratings.length > 0)
+    .sort(
+      (a, b) =>
+        (average(b[1].ratings) ?? 0) - (average(a[1].ratings) ?? 0) ||
+        b[1].ratings.length - a[1].ratings.length,
+    )[0];
+  const topPlatform = platforms[0];
+  const topFranchise = franchises[0];
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-8 py-8 text-white">
-      <div className="mt-6 mb-8">
-        <h1 className="text-4xl font-bold">Stats Dashboard</h1>
-        <p className="mt-2 text-zinc-400">
-          A breakdown of your gaming history.
+    <main className="mx-auto max-w-[1600px] px-4 py-8 sm:px-6 lg:px-8">
+      <header className="mb-8">
+        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-400">
+          Game Vault Analytics
         </p>
-      </div>
+        <h1 className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">
+          Statistics Dashboard
+        </h1>
+        <p className="mt-3 max-w-3xl text-zinc-400">
+          A complete view of your progress, ratings, playtime, genres,
+          platforms, and franchises.
+        </p>
+      </header>
 
-      <section className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-6">
-        <StatCard label="Total Games" value={userGames.length} />
-        <StatCard label="Games Completed" value={completedGames.length} />
-        <StatCard label="In Progress" value={inProgressGames.length} />
-        <StatCard label="On Hold" value={onHoldGames.length} />
-        <StatCard label="Backlog Size" value={backlogGames.length} />
-        <StatCard label="Hours Played" value={totalHoursPlayed.toFixed(1)} />
-        <StatCard
-  label="Backlog Hours"
-  value={`${backlogHoursRemaining.toFixed(1)} hrs`}
-/>
+      <DashboardSection title="Completion Stats">
+        <StatGrid>
+          <StatCard label="Games Completed" value={completed.length} />
+          <StatCard label="Games Started" value={started.length} />
+          <StatCard label="Games Dropped" value={dropped.length} />
+          <StatCard label="Backlog Size" value={backlog.length} />
+          <StatCard
+            label="Completion Rate"
+            value={`${completionRate.toFixed(1)}%`}
+            detail={`${completed.filter((entry) => !entry.game.isEndless).length} of ${completionEligible.length} eligible games`}
+          />
+        </StatGrid>
+      </DashboardSection>
 
-<StatCard
-  label="Avg Completion Time"
-  value={
-    averageCompletionTime != null
-      ? `${averageCompletionTime.toFixed(1)} hrs`
-      : "N/A"
-  }
-/>
+      <DashboardSection title="Ratings">
+        <StatGrid>
+          <StatCard label="Overall Average" value={formatNumber(average(overallRatings))} />
+          <StatCard label="Gameplay Average" value={formatNumber(average(gameplayRatings))} />
+          <StatCard label="Story Average" value={formatNumber(average(storyRatings))} />
+          <StatCard label="Music Average" value={formatNumber(average(musicRatings))} />
+          <StatCard label="Art Average" value={formatNumber(average(artRatings))} />
+          <StatCard label="Median Rating" value={formatNumber(median(overallRatings))} />
+          <GameStatCard label="Highest Rated" entry={highestRated} />
+          <GameStatCard label="Lowest Rated" entry={lowestRated} />
+        </StatGrid>
 
-<StatCard label="Reviews Written" value={reviewsWritten} />
-
-<StatCard label="Platforms Played" value={platformsPlayed} />
-        <StatCard
-          label="Average Rating"
-          value={averageRating != null ? averageRating.toFixed(1) : "N/A"}
-        />
-        <StatCard
-          label="Completion Rate"
-          value={`${completionRate.toFixed(1)}%`}
-        />
-        <StatCard
-          label="Most Played Genre"
-          value={mostPlayedGenre ? mostPlayedGenre[0] : "N/A"}
-        />
-        <StatCard
-          label="Highest Rated Genre"
-          value={highestRatedGenre ? highestRatedGenre.genre : "N/A"}
-        />
-      </section>
-
-      <section className="mt-10 grid gap-6 2xl:grid-cols-3">
-        <Panel title="Top 10 Rated Games - Last Year">
+        <Panel title="Rating Distribution" className="mt-6">
           <div className="space-y-3">
-            {topRatedGames.map((userGame, index) => (
-              <StatRow
-                key={userGame.id}
-                label={`${index + 1}. ${userGame.game.title}`}
-                value={<RatingBadge rating={userGame.reviews[0]?.overallRating} compact />}
+            {ratingDistribution.map(({ rating, count }) => (
+              <BarRow
+                key={rating}
+                label={String(rating)}
+                value={count}
+                width={(count / maxRatingCount) * 100}
               />
             ))}
           </div>
         </Panel>
+      </DashboardSection>
 
-        <Panel title="Most Played Genres">
-          <div className="space-y-3">
-            {mostPlayedGenres.map(([genre, count]) => (
-              <GenreRow key={genre} genre={genre} value={`${count} games`} />
-            ))}
-          </div>
-        </Panel>
+      <DashboardSection title="Time">
+        <StatGrid>
+          <StatCard label="Total Hours" value={`${totalHours.toFixed(1)} hrs`} />
+          <StatCard label="Average Hours" value={`${formatNumber(average(completedHours))} hrs`} />
+          <StatCard label="Median Hours" value={`${formatNumber(median(completedHours))} hrs`} />
+          <GameStatCard label="Longest Game" entry={longest} valueSuffix="hrs" valueField="hours" />
+          <GameStatCard label="Shortest Game" entry={shortest} valueSuffix="hrs" valueField="hours" />
+        </StatGrid>
 
-        <Panel title="Average Rating By Genre">
-          <div className="space-y-3">
-            {averageRatingByGenre.map((item) => (
-              <GenreRow
-                key={item.genre}
-                genre={item.genre}
-                value={`${item.average.toFixed(1)}/10`}
-              />
-            ))}
-          </div>
-        </Panel>
-
-        <Panel title="Yearly Summary">
-          <div className="space-y-3">
-            {years.map((year) => {
-              const ratings = ratingsByYear.get(year) ?? [];
-              const average =
-                ratings.length > 0
-                  ? ratings.reduce((sum, rating) => sum + rating, 0) /
-                    ratings.length
-                  : null;
-
-              return (
-                <StatRow
-                  key={year}
-                  label={String(year)}
-                  value={`${completedByYear.get(year) ?? 0} games • ${(
-                    hoursByYear.get(year) ?? 0
-                  ).toFixed(1)} hrs • ${
-                    average != null ? average.toFixed(1) : "N/A"
-                  } avg`}
+        <div className="mt-6 grid gap-6 xl:grid-cols-2">
+          <Panel title="Hours Per Month">
+            <div className="space-y-3">
+              {MONTHS.map((month, index) => (
+                <BarRow
+                  key={month}
+                  label={month}
+                  value={`${hoursByMonth[index].toFixed(1)} hrs`}
+                  width={(hoursByMonth[index] / maxMonthlyHours) * 100}
                 />
-              );
-            })}
-          </div>
-        </Panel>
-      </section>
-<section className="mt-10 grid gap-6 xl:grid-cols-3">
-  <Panel title="Top Franchises By Games">
-    <div className="space-y-3">
-      {topFranchisesByGames.map(([name, stats]) => (
-        <FranchiseRow
-          key={name}
-          id={stats.id}
-          name={name}
-          value={`${stats.games} games`}
-        />
-      ))}
-    </div>
-  </Panel>
+              ))}
+            </div>
+          </Panel>
+          <Panel title="Hours Per Year">
+            <div className="space-y-3">
+              {yearRows.length > 0 ? (
+                yearRows.map(([year, hours]) => (
+                  <BarRow
+                    key={year}
+                    label={String(year)}
+                    value={`${hours.toFixed(1)} hrs`}
+                    width={(hours / maxYearHours) * 100}
+                  />
+                ))
+              ) : (
+                <EmptyState message="No completed games with dated hours yet." />
+              )}
+            </div>
+          </Panel>
+        </div>
+      </DashboardSection>
 
-  <Panel title="Highest Rated Franchises">
-    <div className="space-y-3">
-      {highestRatedFranchises.map((franchise) => (
-        <FranchiseRow
-          key={franchise.name}
-          id={franchise.id}
-          name={`${franchise.name} (${franchise.count})`}
-          value={`${franchise.average?.toFixed(1)}/10`}
-        />
-      ))}
-    </div>
-  </Panel>
-
-  <Panel title="Most Completed Franchises">
-    <div className="space-y-3">
-      {mostCompletedFranchises.map(([name, stats]) => (
-        <FranchiseRow
-          key={name}
-          id={stats.id}
-          name={name}
-          value={`${stats.completed} completed`}
-        />
-      ))}
-    </div>
-  </Panel>
-</section>
-<section className="mt-10 grid gap-6 lg:grid-cols-3">
-  <Panel title="Top Platforms By Games">
-    <div className="space-y-3">
-      {topPlatformsByGames.length > 0 ? (
-        topPlatformsByGames.map(([name, stats]) => (
-          <PlatformRow
-            key={name}
-            id={stats.id}
-            name={name}
-            value={`${stats.games} games`}
+      <DashboardSection title="Genres">
+        <div className="mb-6 grid gap-4 md:grid-cols-2">
+          <StatCard
+            label="Most Played"
+            value={genres[0]?.[0] ?? "N/A"}
+            detail={genres[0] ? `${genres[0][1].games} games` : undefined}
           />
-        ))
-      ) : (
-        <EmptyState message="No platform data yet." />
-      )}
-    </div>
-  </Panel>
-
-  <Panel title="Highest Rated Platforms">
-    <div className="space-y-3">
-      {highestRatedPlatforms.length > 0 ? (
-        highestRatedPlatforms.map((platform) => (
-          <PlatformRow
-            key={platform.name}
-            id={platform.id}
-            name={`${platform.name} (${platform.count})`}
-            value={`${platform.average?.toFixed(1)}/10`}
+          <StatCard
+            label="Highest Rated"
+            value={highestRatedGenre?.[0] ?? "N/A"}
+            detail={
+              highestRatedGenre
+                ? `${formatNumber(average(highestRatedGenre[1].ratings))}/10 across ${highestRatedGenre[1].ratings.length} ratings`
+                : undefined
+            }
           />
-        ))
-      ) : (
-        <EmptyState message="No platform ratings yet." />
-      )}
-    </div>
-  </Panel>
+        </div>
+        <StatsTable
+          headers={["Genre", "Games", "Completed", "Average Rating", "Average Hours", "Completion"]}
+          rows={genres.map(([name, stats]) => [
+            <Link key={name} href={`/?genre=${encodeURIComponent(name)}`} className="font-semibold hover:underline">{name}</Link>,
+            stats.games,
+            stats.completed,
+            formatNumber(average(stats.ratings)),
+            stats.completed > 0 ? `${(stats.hours / stats.completed).toFixed(1)} hrs` : "N/A",
+            `${completionPercent(stats).toFixed(1)}%`,
+          ])}
+        />
+      </DashboardSection>
 
-  <Panel title="Most Completed Platforms">
-    <div className="space-y-3">
-      {mostCompletedPlatforms.length > 0 ? (
-        mostCompletedPlatforms.map(([name, stats]) => (
-          <PlatformRow
-            key={name}
-            id={stats.id}
-            name={name}
-            value={`${stats.completed} completed`}
+      <DashboardSection title="Platforms">
+        <div className="mb-6">
+          <StatCard
+            label="Top Platform"
+            value={topPlatform?.[0] ?? "N/A"}
+            detail={topPlatform ? `${topPlatform[1].games} games` : undefined}
           />
-        ))
-      ) : (
-        <EmptyState message="No completed platform data yet." />
-      )}
-    </div>
-  </Panel>
-      </section>
-      <section className="mt-10 grid gap-6 lg:grid-cols-2 2xl:grid-cols-3">
-        <RatingsDistributionChart data={ratingRows} />
-        <CompletedByMonthChart data={completedMonthRows} />
-        <GenreBreakdownChart data={genreBreakdownRows} />
-      </section>
+        </div>
+        <StatsTable
+          headers={["Platform", "Games", "Completed", "Average Rating", "Hours", "Completion"]}
+          rows={platforms.map(([name, stats]) => [
+            <Link key={name} href={`/platform/${stats.id}`} className="font-semibold hover:underline">{name}</Link>,
+            stats.games,
+            stats.completed,
+            formatNumber(average(stats.ratings)),
+            `${stats.hours.toFixed(1)} hrs`,
+            `${completionPercent(stats).toFixed(1)}%`,
+          ])}
+        />
+      </DashboardSection>
+
+      <DashboardSection title="Franchises">
+        <div className="mb-6">
+          <StatCard
+            label="Top Franchise"
+            value={topFranchise?.[0] ?? "N/A"}
+            detail={topFranchise ? `${topFranchise[1].games} games played` : undefined}
+          />
+        </div>
+        <StatsTable
+          headers={["Franchise", "Games Played", "Completed", "Completion", "Average Rating", "Hours"]}
+          rows={franchises.map(([name, stats]) => [
+            <Link key={name} href={`/franchise/${stats.id}`} className="font-semibold hover:underline">{name}</Link>,
+            stats.games,
+            stats.completed,
+            `${completionPercent(stats).toFixed(1)}%`,
+            formatNumber(average(stats.ratings)),
+            `${stats.hours.toFixed(1)} hrs`,
+          ])}
+        />
+      </DashboardSection>
     </main>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-      <p className="text-sm text-zinc-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold">{value}</p>
-    </div>
-  );
-}
-
-function Panel({
+function DashboardSection({
   title,
   children,
 }: {
@@ -630,81 +416,142 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="h-full rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-      <h2 className="mb-4 text-xl font-bold">{title}</h2>
+    <section className="mb-10">
+      <h2 className="mb-4 text-2xl font-black tracking-tight">{title}</h2>
       {children}
     </section>
   );
 }
 
-function StatRow({ label, value }: { label: string; value: React.ReactNode }) {
+function StatGrid({ children }: { children: React.ReactNode }) {
+  return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{children}</div>;
+}
+
+function StatCard({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: React.ReactNode;
+  detail?: string;
+}) {
   return (
-    <div className="flex items-center justify-between gap-6 py-1 border-b border-zinc-800 last:border-0">
-      <span className="text-zinc-300">{label}</span>
-      <span className="whitespace-nowrap font-semibold">{value}</span>
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 shadow-sm">
+      <p className="text-sm font-semibold text-zinc-500">{label}</p>
+      <p className="mt-2 break-words text-2xl font-black text-zinc-100">{value}</p>
+      {detail ? <p className="mt-2 text-sm text-zinc-400">{detail}</p> : null}
     </div>
   );
 }
 
-function GenreRow({ genre, value }: { genre: string; value: string }) {
+function GameStatCard({
+  label,
+  entry,
+  valueSuffix,
+  valueField = "rating",
+}: {
+  label: string;
+  entry: DashboardGame | null;
+  valueSuffix?: string;
+  valueField?: "rating" | "hours";
+}) {
+  if (!entry) return <StatCard label={label} value="N/A" />;
+  const value =
+    valueField === "hours"
+      ? entry.hoursPlayed
+      : entry.reviews[0]?.overallRating;
   return (
-    <div className="flex items-center justify-between gap-6 py-1 border-b border-zinc-800 last:border-0">
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 shadow-sm">
+      <p className="text-sm font-semibold text-zinc-500">{label}</p>
       <Link
-        href={`/?genre=${encodeURIComponent(genre)}`}
-        className="min-w-0 truncate text-zinc-300 hover:text-white hover:underline"
+        href={`/game/${entry.game.id}`}
+        className="mt-2 block text-lg font-black text-zinc-100 hover:text-emerald-400 hover:underline"
       >
-        {genre}
+        {entry.game.title}
       </Link>
-      <span className="whitespace-nowrap font-semibold">{value}</span>
+      <p className="mt-2 text-sm font-bold text-emerald-400">
+        {value != null ? `${value.toFixed(1)}${valueSuffix ? ` ${valueSuffix}` : "/10"}` : "N/A"}
+      </p>
     </div>
   );
 }
-function FranchiseRow({
-  id,
-  name,
-  value,
+
+function Panel({
+  title,
+  children,
+  className = "",
 }: {
-  id: number;
-  name: string;
-  value: string;
+  title: string;
+  children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-zinc-800 py-2 last:border-0">
-      <Link
-        href={`/franchise/${id}`}
-        className="min-w-0 truncate text-zinc-300 hover:text-white hover:underline"
-      >
-        {name}
-      </Link>
-      <span className="whitespace-nowrap font-semibold">{value}</span>
+    <section className={`rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 ${className}`}>
+      <h3 className="mb-5 text-xl font-black">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function BarRow({
+  label,
+  value,
+  width,
+}: {
+  label: string;
+  value: React.ReactNode;
+  width: number;
+}) {
+  return (
+    <div className="grid grid-cols-[3rem_1fr_auto] items-center gap-3">
+      <span className="font-semibold text-zinc-300">{label}</span>
+      <div className="h-3 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          className="h-full rounded-full bg-emerald-500 transition-[width]"
+          style={{ width: `${Math.max(0, Math.min(100, width))}%` }}
+        />
+      </div>
+      <span className="min-w-16 text-right text-sm font-bold text-zinc-300">{value}</span>
     </div>
   );
 }
-function PlatformRow({
-  id,
-  name,
-  value,
+
+function StatsTable({
+  headers,
+  rows,
 }: {
-  id: number;
-  name: string;
-  value: string;
+  headers: string[];
+  rows: React.ReactNode[][];
 }) {
+  if (rows.length === 0) return <EmptyState message="No data available yet." />;
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-zinc-800 py-2 last:border-0">
-      <Link
-        href={`/platform/${id}`}
-        className="min-w-0 truncate text-zinc-300 hover:text-white hover:underline"
-      >
-        {name}
-      </Link>
-      <span className="whitespace-nowrap font-semibold">{value}</span>
+    <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-900/80">
+      <table className="min-w-full text-left text-sm">
+        <thead className="border-b border-zinc-800 bg-zinc-950/60 text-xs uppercase tracking-wider text-zinc-500">
+          <tr>
+            {headers.map((header) => (
+              <th key={header} className="whitespace-nowrap px-4 py-3">{header}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={rowIndex} className="border-b border-zinc-800/80 last:border-0 hover:bg-zinc-800/30">
+              {row.map((cell, cellIndex) => (
+                <td key={cellIndex} className="whitespace-nowrap px-4 py-3 text-zinc-300">{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <p className="rounded-lg border border-dashed border-zinc-800 p-4 text-sm text-zinc-500">
+    <p className="rounded-xl border border-dashed border-zinc-700 p-5 text-sm text-zinc-500">
       {message}
     </p>
   );

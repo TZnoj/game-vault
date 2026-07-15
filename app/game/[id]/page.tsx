@@ -329,7 +329,7 @@ export default async function GamePage({ params }: PageProps) {
                       />
                       <CopyValue label="Completed" value={formatCalendarDate(copy.dateCompleted)} />
                       <Link
-                        href={`/admin/game/${copy.gameId}/copy/${copy.id}`}
+                        href={`/admin/copy/${copy.id}`}
                         className="text-sm font-semibold text-zinc-300 hover:text-white hover:underline"
                       >
                         Edit

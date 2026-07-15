@@ -31,6 +31,9 @@ export function RecommendationCard({ recommendation }: { recommendation: Recomme
             <Bar label="Art" value={breakdown.art} />
             <Bar label="Length" value={breakdown.length} />
           </div>
+          <p className="mt-3 text-[10px] leading-4 text-zinc-600">
+            Gameplay, Story, and Art are estimated from your shared tags and themes—not external review scores. Length uses HLTB Main.
+          </p>
         </div>
       </Link>
     </article>

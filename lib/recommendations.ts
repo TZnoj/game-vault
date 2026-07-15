@@ -34,7 +34,28 @@ export type RecommendationResult = {
 };
 
 const STANDALONE = "standalone";
+const BLOCKED_RECOMMENDATION_STATUSES = new Set(["COMPLETED", "PLAYING", "REPLAYING"]);
 const normalize = (value: string) => value.trim().toLowerCase();
+const normalizeTitle = (value: string) => normalize(value).replace(/[^a-z0-9]+/g, " ").trim();
+
+const GAMEPLAY_TERMS = [
+  "action", "action rpg", "jrpg", "rpg", "srpg", "strategy", "tactical", "turn-based",
+  "turn based", "soulslike", "platformer", "shooter", "fighting", "rhythm", "puzzle",
+  "simulation", "sim", "monster collector", "roguelike", "roguelite", "stealth", "survival",
+  "hack and slash", "musou", "metroidvania", "adventure",
+];
+
+const STORY_TERMS = [
+  "story", "story heavy", "visual novel", "narrative", "mystery", "romance", "horror",
+  "psychological", "character", "drama", "historical", "crime", "detective", "choice",
+  "multiple endings", "social sim", "fantasy", "sci-fi", "science fiction",
+];
+
+const ART_TERMS = [
+  "anime", "pixel", "pixel art", "2d", "3d", "stylized", "realistic", "fantasy", "dark fantasy",
+  "sci-fi", "science fiction", "horror", "retro", "gothic", "colorful", "hand-drawn",
+  "cel shaded", "cel-shaded", "noir",
+];
 
 function validFranchise(game: RecommendationGame) {
   const franchise = game.franchise;
@@ -62,9 +83,28 @@ function overlapScore(a: string[], b: string[]) {
   return (shared / Math.max(left.size, right.size)) * 100;
 }
 
-function ratingSimilarity(a: number | null | undefined, b: number | null | undefined) {
-  if (a == null || b == null) return 50;
-  return clamp(100 - Math.abs(a - b) * 12.5);
+function matchingTags(tags: string[], terms: string[]) {
+  return tags.filter((tag) => {
+    const normalizedTag = normalize(tag);
+    return terms.some((term) => normalizedTag.includes(term));
+  });
+}
+
+function categorySimilarity(sourceTags: string[], candidateTags: string[], terms: string[], fallback: number) {
+  const sourceCategoryTags = matchingTags(sourceTags, terms);
+  const candidateCategoryTags = matchingTags(candidateTags, terms);
+
+  if (!sourceCategoryTags.length || !candidateCategoryTags.length) {
+    return clamp(fallback);
+  }
+
+  return clamp(overlapScore(sourceCategoryTags, candidateCategoryTags));
+}
+
+function preferenceBoost(rating: number | null | undefined) {
+  if (rating == null) return 1;
+  // Ratings affect confidence only slightly. They do not invent candidate ratings.
+  return 0.9 + (Math.max(0, Math.min(10, rating)) / 10) * 0.2;
 }
 
 function lengthSimilarity(a: number | null, b: number | null) {
@@ -86,18 +126,20 @@ function scorePair(source: RecommendationGame, candidate: RecommendationGame): R
   );
 
   const sourceReview = latestReview(source);
-  const candidateReview = latestReview(candidate);
   const genreScore = overlapScore(sourceGenres, candidateGenres);
 
+  // These are tag-based estimates. Candidate games in the backlog usually have no review scores yet.
   const gameplay = clamp(
-    genreScore * 0.7 +
-      ratingSimilarity(sourceReview?.gameplayRating, candidateReview?.gameplayRating) * 0.3,
+    categorySimilarity(sourceGenres, candidateGenres, GAMEPLAY_TERMS, genreScore) *
+      preferenceBoost(sourceReview?.gameplayRating),
   );
   const story = clamp(
-    genreScore * 0.45 + ratingSimilarity(sourceReview?.storyRating, candidateReview?.storyRating) * 0.55,
+    categorySimilarity(sourceGenres, candidateGenres, STORY_TERMS, genreScore * 0.8 + 10) *
+      preferenceBoost(sourceReview?.storyRating),
   );
   const art = clamp(
-    genreScore * 0.3 + ratingSimilarity(sourceReview?.artRating, candidateReview?.artRating) * 0.7,
+    categorySimilarity(sourceGenres, candidateGenres, ART_TERMS, genreScore * 0.65 + 15) *
+      preferenceBoost(sourceReview?.artRating),
   );
   const length = lengthSimilarity(source.hltbMain, candidate.hltbMain);
 
@@ -108,7 +150,7 @@ function scorePair(source: RecommendationGame, candidate: RecommendationGame): R
   );
 
   const match = clamp(
-    gameplay * 0.35 + story * 0.25 + art * 0.1 + length * 0.15 + genreScore * 0.15 +
+    gameplay * 0.35 + story * 0.2 + art * 0.1 + length * 0.15 + genreScore * 0.2 +
       (sameFranchise ? 8 : 0),
   );
 
@@ -116,9 +158,9 @@ function scorePair(source: RecommendationGame, candidate: RecommendationGame): R
   sharedGenres.slice(0, 4).forEach((genre) => reasons.push(genre));
   if (sameFranchise && sourceFranchise) reasons.push(`Same ${sourceFranchise.name} franchise`);
   if (length >= 80) reasons.push("Similar game length");
-  if (gameplay >= 85) reasons.push("Very similar gameplay profile");
-  if (story >= 85) reasons.push("Strong story match");
-  if (art >= 85) reasons.push("Similar art-score profile");
+  if (gameplay >= 80) reasons.push("Similar gameplay tags");
+  if (story >= 80) reasons.push("Similar narrative themes");
+  if (art >= 80) reasons.push("Similar visual themes");
   if (!reasons.length) reasons.push("Balanced overall similarity");
 
   let type: RecommendationResult["type"] = "IF_YOU_LIKED";
@@ -137,8 +179,14 @@ function scorePair(source: RecommendationGame, candidate: RecommendationGame): R
   };
 }
 
-function isCandidate(game: RecommendationGame) {
-  return game.userGames.some((copy) => copy.status === "BACKLOG");
+function hasBlockedStatus(game: RecommendationGame) {
+  return game.userGames.some((copy) => BLOCKED_RECOMMENDATION_STATUSES.has(copy.status));
+}
+
+function isBacklogOnly(game: RecommendationGame) {
+  return game.userGames.length > 0 &&
+    game.userGames.some((copy) => copy.status === "BACKLOG") &&
+    game.userGames.every((copy) => copy.status === "BACKLOG");
 }
 
 function isLiked(game: RecommendationGame) {
@@ -147,11 +195,32 @@ function isLiked(game: RecommendationGame) {
     (review?.overallRating ?? 0) >= 7.5;
 }
 
+function getEligibleCandidates(games: RecommendationGame[], source?: RecommendationGame) {
+  const blockedTitles = new Set(
+    games
+      .filter(hasBlockedStatus)
+      .map((game) => normalizeTitle(game.title)),
+  );
+
+  const seenTitles = new Set<string>();
+  const sourceTitle = source ? normalizeTitle(source.title) : null;
+
+  return games.filter((game) => {
+    const title = normalizeTitle(game.title);
+    if (!title || title === sourceTitle) return false;
+    if (blockedTitles.has(title)) return false;
+    if (!isBacklogOnly(game)) return false;
+    if (seenTitles.has(title)) return false;
+    seenTitles.add(title);
+    return true;
+  });
+}
+
 export function buildPersonalRecommendations(games: RecommendationGame[], limitPerType = 6) {
   const sources = shuffled(games.filter(isLiked))
     .sort((a, b) => (latestReview(b)?.overallRating ?? 0) - (latestReview(a)?.overallRating ?? 0))
     .slice(0, 12);
-  const candidates = games.filter(isCandidate);
+  const candidates = getEligibleCandidates(games);
 
   const bestByCandidate = new Map<number, RecommendationResult>();
   for (const candidate of candidates) {
@@ -179,11 +248,10 @@ export function buildPersonalRecommendations(games: RecommendationGame[], limitP
 
 export function buildRecommendationsForGame(
   source: RecommendationGame,
-  candidates: RecommendationGame[],
+  games: RecommendationGame[],
   limit = 8,
 ) {
-  return shuffled(candidates)
-    .filter((candidate) => candidate.id !== source.id)
+  return shuffled(getEligibleCandidates(games, source))
     .map((candidate) => scorePair(source, candidate))
     .filter((result) => result.match >= 35)
     .sort((a, b) => b.match - a.match)

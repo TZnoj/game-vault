@@ -84,6 +84,8 @@ function toRecommendationGame(game: HealthGame): RecommendationGame {
     gameGenres: game.gameGenres,
     userGames: game.userGames.map((copy) => ({
       status: copy.status,
+      dateStarted: copy.dateStarted,
+      dateCompleted: copy.dateCompleted,
       hoursPlayed: copy.hoursPlayed,
       reviews: copy.reviews,
     })),

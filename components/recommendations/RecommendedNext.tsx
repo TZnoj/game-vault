@@ -67,15 +67,19 @@ function randomize<T>(items: T[]) {
 export function RecommendedNext({ data }: { data: RecommendedNextData }) {
   const [refreshPage, setRefreshPage] = useState(0);
   const [surpriseSeed, setSurpriseSeed] = useState(0);
-  const [mode, setMode] = useState<"ranked" | "surprise">("ranked");
+  const [mode, setMode] = useState<"ranked" | "surprise" | "lowest">("ranked");
 
   const visible = useMemo(() => {
     if (mode === "surprise") {
       return diversify(randomize(data.surprisePool).slice(0, 18));
     }
 
+    if (mode === "lowest") {
+      return data.lowestMatchPool.slice(0, 3);
+    }
+
     return diversify(rotate(data.rankedPool, refreshPage * 3).slice(0, 15));
-  }, [data.rankedPool, data.surprisePool, mode, refreshPage, surpriseSeed]);
+  }, [data.lowestMatchPool, data.rankedPool, data.surprisePool, mode, refreshPage, surpriseSeed]);
 
   if (!data.recentSources.length) {
     return (
@@ -135,6 +139,14 @@ export function RecommendedNext({ data }: { data: RecommendedNextData }) {
           >
             Surprise me
           </button>
+          <button
+            type="button"
+            onClick={() => setMode("lowest")}
+            className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-500/20"
+            title="Shows the three eligible backlog games with the lowest match percentages against your current and recently completed games."
+          >
+            Lowest match
+          </button>
         </div>
       </div>
 
@@ -150,12 +162,15 @@ export function RecommendedNext({ data }: { data: RecommendedNextData }) {
         </div>
       )}
 
-      <div className="mt-5 grid gap-3 text-xs text-zinc-400 sm:grid-cols-2">
+      <div className="mt-5 grid gap-3 text-xs text-zinc-400 sm:grid-cols-3">
         <p className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
           <strong className="text-zinc-200">Refresh</strong> cycles through other high-scoring recommendations from the strongest candidate pool.
         </p>
         <p className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
           <strong className="text-zinc-200">Surprise Me</strong> samples from a wider pool to surface good but less obvious backlog choices.
+        </p>
+        <p className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
+          <strong className="text-zinc-200">Lowest Match</strong> shows the three eligible backlog games least similar to your current and recently completed games.
         </p>
       </div>
     </section>

@@ -40,6 +40,7 @@ export type RecommendedNextData = {
   recentGenres: string[];
   rankedPool: RecommendationResult[];
   surprisePool: RecommendationResult[];
+  lowestMatchPool: RecommendationResult[];
 };
 
 const STANDALONE = "standalone";
@@ -281,6 +282,7 @@ export function buildRecommendedNext(games: RecommendationGame[]): RecommendedNe
       recentGenres: [],
       rankedPool: [],
       surprisePool: [],
+      lowestMatchPool: [],
     };
   }
 
@@ -330,6 +332,9 @@ export function buildRecommendedNext(games: RecommendationGame[]): RecommendedNe
       .map((entry) => entry.label),
     rankedPool: ranked.slice(0, 24),
     surprisePool: ranked.slice(0, 50),
+    lowestMatchPool: [...scored]
+      .sort((a, b) => a.match - b.match || a.game.title.localeCompare(b.game.title))
+      .slice(0, 24),
   };
 }
 

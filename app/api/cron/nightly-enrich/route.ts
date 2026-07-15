@@ -48,7 +48,21 @@ export async function GET(request: Request) {
   let gamesFailed = 0;
 
   try {
-    const games = await prisma.game.findMany({
+    const now = new Date();
+    const successfulCheckCutoff = new Date(
+      now.getTime() - 30 * 24 * 60 * 60 * 1000,
+    );
+    const failedCheckCutoff = new Date(
+      now.getTime() - 24 * 60 * 60 * 1000,
+    );
+
+    // Do not order by Game.updatedAt here. A successful enrichment check that
+    // finds no changes does not update the Game row, which caused the same
+    // oldest games to be selected on every cron run.
+    //
+    // Instead, load the latest enrichment log for each incomplete game and
+    // choose games that have never been checked or whose cooldown has expired.
+    const candidates = await prisma.game.findMany({
       where: {
         OR: [
           { coverArtUrl: null },
@@ -57,13 +71,41 @@ export async function GET(request: Request) {
           { releaseDate: null },
         ],
       },
-      orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
-      take: GAMES_PER_RUN,
       select: {
         id: true,
         title: true,
+        enrichmentLogs: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            status: true,
+            createdAt: true,
+          },
+        },
       },
     });
+
+    const games = candidates
+      .filter((game) => {
+        const latestLog = game.enrichmentLogs[0];
+
+        if (!latestLog) return true;
+
+        if (latestLog.status === "failed") {
+          return latestLog.createdAt <= failedCheckCutoff;
+        }
+
+        return latestLog.createdAt <= successfulCheckCutoff;
+      })
+      .sort((a, b) => {
+        const aCheckedAt = a.enrichmentLogs[0]?.createdAt.getTime() ?? 0;
+        const bCheckedAt = b.enrichmentLogs[0]?.createdAt.getTime() ?? 0;
+
+        if (aCheckedAt !== bCheckedAt) return aCheckedAt - bCheckedAt;
+        return a.id - b.id;
+      })
+      .slice(0, GAMES_PER_RUN)
+      .map(({ id, title }) => ({ id, title }));
 
     const results: {
       id: number;

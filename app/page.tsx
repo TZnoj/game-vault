@@ -2,6 +2,7 @@ import Link from "next/link";
 import { GameLibrary } from "@/components/GameLibrary";
 import { HomeDashboard } from "@/components/HomeDashboard";
 import { prisma } from "@/lib/prisma";
+import { getIsAdmin } from "@/lib/adminAuth";
 
 type PageProps = {
   searchParams: Promise<{
@@ -26,6 +27,7 @@ function getCopyPriority(userGame: {
 
 export default async function Home({ searchParams }: PageProps) {
   const { genre, rating, franchise } = await searchParams;
+  const isAdmin = await getIsAdmin();
   const now = new Date();
   const currentYear = now.getFullYear();
   const startOfYear = new Date(currentYear, 0, 1);
@@ -194,15 +196,17 @@ export default async function Home({ searchParams }: PageProps) {
       <div className="flex items-center justify-between px-8 pt-6">
         <h1 className="text-3xl font-bold">Game Vault</h1>
 
-        <div className="ml-auto flex items-center gap-2">
-          <Link
-            href="/admin"
-            title="Admin"
-            className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-600 hover:border-zinc-600 hover:text-zinc-300"
-          >
-            ⚙
-          </Link>
-        </div>
+        {isAdmin && (
+          <div className="ml-auto flex items-center gap-2">
+            <Link
+              href="/admin"
+              title="Admin"
+              className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-600 hover:border-zinc-600 hover:text-zinc-300"
+            >
+              ⚙
+            </Link>
+          </div>
+        )}
       </div>
 
       <HomeDashboard recentGames={recentGames} groups={groups} />

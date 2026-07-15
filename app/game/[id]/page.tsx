@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { RatingBadge } from "@/components/RatingBadge";
 import { GameRecommendations } from "@/components/recommendations/GameRecommendations";
+import { getIsAdmin } from "@/lib/adminAuth";
 import { BackButton } from "@/components/ui/BackButton";
 
 type PageProps = {
@@ -61,6 +62,7 @@ type SummaryItem = {
 };
 
 export default async function GamePage({ params }: PageProps) {
+  const isAdmin = await getIsAdmin();
   const { id } = await params;
   const gameId = Number(id);
 
@@ -161,9 +163,11 @@ export default async function GamePage({ params }: PageProps) {
             <Link href="/" className="secondaryButton">
               ← Library
             </Link>
-            <Link href={`/admin/game/${game.id}`} className="secondaryButton">
-              ⚙ Edit
-            </Link>
+            {isAdmin && (
+              <Link href={`/admin/game/${game.id}`} className="secondaryButton">
+                ⚙ Edit
+              </Link>
+            )}
           </div>
 
           <div className="flex gap-2">
@@ -330,12 +334,16 @@ export default async function GamePage({ params }: PageProps) {
                         value={copyReview?.overallRating != null ? `${copyReview.overallRating}/10` : "N/A"}
                       />
                       <CopyValue label="Completed" value={formatCalendarDate(copy.dateCompleted)} />
-                      <Link
-                        href={`/admin/copy/${copy.id}`}
-                        className="text-sm font-semibold text-zinc-300 hover:text-white hover:underline"
-                      >
-                        Edit
-                      </Link>
+                      {isAdmin ? (
+                        <Link
+                          href={`/admin/copy/${copy.id}`}
+                          className="text-sm font-semibold text-zinc-300 hover:text-white hover:underline"
+                        >
+                          Edit
+                        </Link>
+                      ) : (
+                        <span aria-hidden="true" />
+                      )}
                     </div>
                   );
                 })}

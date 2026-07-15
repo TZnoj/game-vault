@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/adminAuth";
 import { enrichSingleGame } from "@/lib/enrichGame";
 import { revalidateGameData } from "@/lib/revalidateGameData";
 import { AdminEditForm } from "@/components/admin/AdminEditForm";
@@ -29,16 +28,6 @@ function parseNullableNumber(value: FormDataEntryValue | null) {
   return Number.isFinite(number) ? number : null;
 }
 
-async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-
-
-  if (session?.user?.email !== "tylerznoj1995@gmail.com") {
-    throw new Error(
-      `Unauthorized: ${session?.user?.email ?? "NO SESSION"}`,
-    );
-  }
-}
 
 async function createGame(formData: FormData) {
   "use server";

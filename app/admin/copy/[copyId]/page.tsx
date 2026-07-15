@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/adminAuth";
 import { revalidateGameData } from "@/lib/revalidateGameData";
 import { AdminEditForm } from "@/components/admin/AdminEditForm";
 import { AutoSaveNotes } from "@/components/admin/AutoSaveNotes";
@@ -15,16 +14,6 @@ type PageProps = {
   }>;
 };
 
-async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-
-
-  if (session?.user?.email !== "tylerznoj1995@gmail.com") {
-    throw new Error(
-      `Unauthorized: ${session?.user?.email ?? "NO SESSION"}`,
-    );
-  }
-}
 
 function parseNullableNumber(value: FormDataEntryValue | null) {
   if (!value) return null;

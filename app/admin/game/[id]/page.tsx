@@ -2,8 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/adminAuth";
 import { revalidateGameData } from "@/lib/revalidateGameData";
 import { AdminEditForm } from "@/components/admin/AdminEditForm";
 
@@ -35,16 +34,6 @@ function parseNullableDate(value: FormDataEntryValue | null) {
   return new Date(text);
 }
 
-async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-
-
-  if (session?.user?.email !== "tylerznoj1995@gmail.com") {
-    throw new Error(
-      `Unauthorized: ${session?.user?.email ?? "NO SESSION"}`,
-    );
-  }
-}
 
 type IgdbCoverChoice = {
   name: string;
